@@ -132,7 +132,7 @@ export default function ChatGPTUrlScreen() {
                         </h1>
 
                         <p className="text-gray-400 text-lg">
-                            Submit your workflow and automate with n8n
+                            Submit your workflow and automate with AI
                         </p>
 
                     </div>
@@ -211,7 +211,7 @@ export default function ChatGPTUrlScreen() {
                                 <div className="w-5 h-5 border-2 border-green-400 border-t-transparent rounded-full animate-spin"></div>
 
                                 <p className="text-gray-300">
-                                    Waiting for n8n response...
+                                    Waiting for the response...
                                 </p>
 
                             </div>

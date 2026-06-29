@@ -149,7 +149,7 @@ function VideoGenerate() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[calc(100vh-200px)]">
 
                 {/* PROMPTS SECTION */}
-                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6">
+                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6 relative">
                     <h2 className="text-xl font-semibold">Video Prompts</h2>
                     <p className="text-gray-400 text-sm mb-4">
                         AI-generated video instructions
@@ -157,7 +157,7 @@ function VideoGenerate() {
 
                     <div className="space-y-4 max-h-[600px] overflow-auto pr-2">
                         {(!videoPrompt || videoPrompt.length === 0) && (
-                            <p className="text-gray-500 text-sm">
+                            <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
                                 No prompts available
                             </p>
                         )}
@@ -184,7 +184,7 @@ function VideoGenerate() {
                 </div>
 
                 {/* VIDEO OUTPUT SECTION */}
-                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6">
+                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6 relative">
                     <div className="flex items-center justify-between mb-4">
                         <div>
                             <h2 className="text-xl font-semibold">Generated Videos</h2>
@@ -203,7 +203,7 @@ function VideoGenerate() {
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-auto pr-2">
 
                         {videoGenerate?.length === 0 && (
-                            <p className="text-gray-500 text-sm">
+                            <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
                                 No videos generated yet
                             </p>
                         )}

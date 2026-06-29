@@ -211,7 +211,7 @@ CRITICAL RULES:
 - Must be valid JSON
 
 TASK:
-Generate ONE high-converting marketing video advertisement prompt.
+Generate ONE high-converting 10-second marketing video advertisement.
 
 IMAGE ANALYSIS:
 ${images}
@@ -220,58 +220,62 @@ WEBSITE CONTENT:
 ${webContent || "Not provided"}
 
 OBJECTIVE:
-Create a professional marketing video concept based entirely on the image analysis above.
+Create a premium 10-second marketing video concept based entirely on the image analysis.
 
 VIDEO GOALS:
 - Increase conversions
 - Generate leads
 - Improve brand awareness
-- Drive user engagement
-- Promote products or services effectively
+- Drive engagement
+- Promote product/service effectively
 
-VIDEO STRUCTURE:
+VIDEO DURATION RULE:
+- TOTAL VIDEO LENGTH MUST BE EXACTLY 10 SECONDS
+- Fast-paced commercial style
+- Every second must be intentional
 
-1. Opening Hook
-- First 3 seconds must grab attention immediately
-
-2. Product/Brand Introduction
-- Introduce the product, service, or brand value
-
-3. Benefits Showcase
-- Highlight key benefits
-- Focus on customer outcomes
-
-4. Social Proof / Trust
-- Demonstrate credibility, trust, innovation, or quality
-
-5. Call To Action
-- Strong marketing CTA
+VIDEO STRUCTURE (10s breakdown):
+- 0–3s: Powerful Hook (attention grab, problem/curiosity)
+- 3–7s: Product/Benefit showcase (value + transformation)
+- 7–10s: Strong CTA (urgency + action)
 
 MOTION INSTRUCTIONS:
-- Camera movements
-- Smooth zooms
-- Product focus transitions
-- Dynamic scene movement
-- Professional advertising pacing
+- Fast cinematic cuts
+- Smooth zoom-ins on product
+- Dynamic transitions every 1–2 seconds
+- Clean commercial pacing
+- Focus-driven camera movement
+- Premium ad aesthetic
 
 VISUAL STYLE:
-- Premium advertising
-- Modern branding
-- Commercial quality
-- Social media ad ready
-- Meta Ads quality
-- YouTube Ads quality
-- Landing page hero video quality
+- High-end commercial advertising
+- Modern brand identity
+- Social media ad optimized
+- Meta Ads / YouTube Ads quality
+- Clean, premium, conversion-focused visuals
+
+VOICE OVER INSTRUCTIONS:
+- MUST be strictly for a 10-second video
+- Total script length: 25–35 words maximum
+- Must follow structure: Hook → Value → CTA
+- Extremely punchy and emotional
+- No filler words
+- Sound like a professional ad narrator
+- Every word must drive conversion
+- Must match fast visual cuts
+- CTA must be included in final line
+- High urgency and persuasive tone
 
 OUTPUT FORMAT:
 
 {
   "video_prompt": {
-    "headline": "string",
-    "marketing_angle": "string",
-    "prompt": "detailed video generation prompt",
-    "style": "marketing style keywords",
-    "cta": "string"
+    "headline": "string (short, high-impact marketing headline)",
+    "marketing_angle": "string (core advertising strategy)",
+    "prompt": "detailed 10-second cinematic video generation prompt with scene breakdown and motion direction",
+    "voice_over_10s": "ultra-short 10-second voice-over script (25–35 words max, fully aligned to visuals)",
+    "style": "marketing keywords like premium, cinematic, UGC-style, direct response, etc.",
+    "cta": "strong call to action (1 short line)"
   }
 }
 `;

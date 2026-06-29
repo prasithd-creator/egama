@@ -197,10 +197,10 @@ function Images() {
             </div>
 
             {/* Content Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[calc(100vh-200px)]">
 
                 {/* PROMPTS SECTION */}
-                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6">
+                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6 relative">
 
                     <div className="mb-4">
                         <h2 className="text-xl font-semibold text-white">
@@ -212,6 +212,11 @@ function Images() {
                     </div>
 
                     <div className="space-y-4 max-h-[600px] overflow-auto pr-2">
+                        {(!state || state.length === 0) && (
+                            <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
+                                No prompts available
+                            </p>
+                        )}
 
                         {state?.map((item: any, index: number) => (
                             <div
@@ -234,9 +239,9 @@ function Images() {
                 </div>
 
                 {/* GENERATED IMAGES SECTION */}
-                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6">
+                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6 relative">
 
-                    <div className="mb-4 flex items-center justify-between">
+                    <div className="mb-4 flex items-center justify-between ">
                         <div>
                             <h2 className="text-xl font-semibold text-white">
                                 Generated Images
@@ -254,6 +259,13 @@ function Images() {
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-auto pr-2">
+                        {
+                            (!imagegenerate || imagegenerate?.length === 0) && (
+                                <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
+                                    No images available
+                                </p>
+                            )
+                        }
 
                         {imagegenerate?.map((item: any, index: number) => (
                             <div
