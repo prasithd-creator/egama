@@ -21,6 +21,8 @@ function VideoGenerate() {
         setImagegenerate(state?.comfyImage);
     }, []);
 
+    console.log(videoPrompt);
+
 
     /// final code change video generate
     const sleep = (ms: number) =>
@@ -65,6 +67,8 @@ function VideoGenerate() {
 
                 // Secondary noise (motion / variation)
                 wf["320:277"].inputs.noise_seed = seed + 1;
+
+                wf["320:301"].inputs.value = 10;
 
                 console.log("Sending:", { p, img });
 
@@ -135,8 +139,9 @@ function VideoGenerate() {
                 <button
                     onClick={generateVideo}
                     disabled={loading}
-                    className="bg-green-500 hover:bg-green-600 px-6 py-3 rounded-2xl font-semibold shadow-lg disabled:opacity-50 cursor-pointer"
+                    className="bg-green-500 hover:bg-green-600 px-6 py-3 rounded-2xl font-semibold shadow-lg disabled:opacity-50 cursor-pointer flex items-center gap-2"
                 >
+                    {loading && <div className="w-5 h-5 border-2 border-t-transparent border-green-900 animate-spin rounded-full"></div>}
                     {loading
                         ? "Generating..."
                         : reGenerate
@@ -177,6 +182,7 @@ function VideoGenerate() {
                                 <p className="text-gray-300 text-sm leading-relaxed">
                                     {item.prompt}
                                 </p>
+                                <p>Voice Over:{item.voice_over_10s}</p>
                                 <p>{item.cta}</p>
                             </div>
                         ))}

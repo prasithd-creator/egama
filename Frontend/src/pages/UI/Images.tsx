@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from "react-router"
 import { useState, useContext, useEffect } from "react";
-import workflow from "../../Comfy_Api/ImageAPI";
+import workflow from "../../Comfy_Api/imageAPI-Img";
 import { AppContext } from "../../Context/createContent";
 import axios from "axios";
 import { toast } from "react-toastify";
@@ -9,7 +9,7 @@ function Images() {
     const location = useLocation();
     const navigate = useNavigate();
     const context = useContext(AppContext);
-    const state = location.state as any;
+    const state = location.state.data as any;
     const responseData = state;
     const [loading, setLoading] = useState<boolean>(false);
     const [imagegenerate, setImagegenerate] = useState<any>(null);
@@ -20,7 +20,9 @@ function Images() {
     const [uploading, setUploading] = useState<boolean>(false);
     const [comfyImage, setComfyImage] = useState<any>(null);
     const [generateLoading, setGenerateLoading] = useState<boolean>(false);
+    const referencesImg = location?.state?.uploaded;
 
+    console.log(referencesImg);
 
     /// final code
     const sleep = (ms: number) =>
@@ -40,10 +42,24 @@ function Images() {
             for (const p of prompts) {
                 const wf = structuredClone(workflow);
 
-                wf["58"].inputs.value = p;
-                wf["57:3"].inputs.seed = Math.floor(Math.random() * 999999999);
+                // only one prompt
+                // wf["58"].inputs.value = p;
+                // wf["57:3"].inputs.seed = Math.floor(Math.random() * 999999999);
+                // console.log("Sending:", p);
 
-                console.log("Sending:", p);
+                // references images prompt
+                wf["135"].inputs.text = p; // your CLIPTextEncode node
+                wf["125"].inputs.noise_seed = Math.floor(Math.random() * 999999999);
+
+
+                if (referencesImg?.length >= 2) {
+                    wf["76"].inputs.image = referencesImg[0];
+                    wf["81"].inputs.image = referencesImg[1];
+                } else {
+                    throw new Error("Need 2 input images");
+                }
+
+                console.log("Sending prompt:", p);
 
                 // 1. SEND REQUEST
                 const res = await fetch("/api/prompt", {
@@ -65,9 +81,10 @@ function Images() {
 
                     const historyRes = await fetch(`/api/history/${promptId}`);
                     const history = await historyRes.json();
+                    console.log("History:", history);
 
                     const image =
-                        history?.[promptId]?.outputs?.["9"]?.images?.[0];
+                        history?.[promptId]?.outputs?.["94"]?.images?.[0];
 
                     if (image) {
                         imageUrl = `http://192.168.0.161:5454/api/view?filename=${image.filename}`;
@@ -180,8 +197,9 @@ function Images() {
                     <button
                         onClick={generateImage}
                         disabled={loading}
-                        className="bg-green-500 hover:bg-green-600 cursor-pointer disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg transition-all"
+                        className="bg-green-500 hover:bg-green-600 cursor-pointer disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg transition-all flex items-center gap-2"
                     >
+                        {loading && <div className="w-5 h-5 border-2 border-green-900 border-t-transparent rounded-full animate-spin"></div>}
                         {loading ? "Generating..." : reGenerate ? "Regenerate" : "Generate Images"}
                     </button>
                     {reGenerate &&
@@ -190,7 +208,8 @@ function Images() {
                             disabled={loading}
                             className="bg-blue-500 hover:bg-blue-600 cursor-pointer disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg transition-all"
                         >
-                            {uploading ? "uploading..." : generateLoading ? "Generating Prompt..." : "Upload"}
+                            {uploading && <div className="w-5 h-5 border-2 border-blue-900 border-t-transparent rounded-full animate-spin"></div>}
+                            {uploading ? "Uploading..." : generateLoading ? "Generating Prompt..." : "Upload"}
                         </button>
                     }
                 </div>

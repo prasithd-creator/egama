@@ -18,10 +18,27 @@ export default function ChatGPTUrlScreen() {
     const [imgGenerated, setImgGenerated] = useState<boolean>(false);
     const [RequirementLoading, setRequirementLoading] = useState<boolean>(false);
     const BackendUrl = context?.BackendUrl as string;
+    const [referenceImg, setReferenceImg] = useState<any>([]);
+    const [selectedImages, setSelectedImages] = useState<string[]>([]);
+    const [comfyImage, setComfyImage] = useState<any>(null);
 
     useEffect(() => {
         localStorage.setItem("responseData", JSON.stringify(responseData));
     }, [responseData]);
+
+
+    //map the image for the referrences in the markdown
+    useEffect(() => {
+        if (!responseData?.markdown) return;
+
+        const imageRegex = /!\[.*?\]\((https?:\/\/.*?)\)/g;
+
+        const productImages = [...responseData.markdown.matchAll(imageRegex)]
+            .map((match) => match[1])
+            .slice(0, 15);
+
+        setReferenceImg(productImages);
+    }, [responseData?.markdown]);
 
 
     //submit the URL
@@ -56,6 +73,7 @@ export default function ChatGPTUrlScreen() {
 
     //submit the requirement
     const sendResponse = async () => {
+        if (!selectedImages || selectedImages.length < 2) return toast.error("Please select 2 images");
         setRequirementLoading(true);
         const metadata = responseData?.metadata;
 
@@ -63,7 +81,7 @@ export default function ChatGPTUrlScreen() {
 
         const updatedMetadata = {
             ...metadata,
-            requirements: content, // 👈 add here
+            requirements: content,
         };
         const updatedResponseData = {
             ...responseData,
@@ -87,7 +105,8 @@ export default function ChatGPTUrlScreen() {
                 const data = res.data.combinedPrompts;
                 console.log(data);
                 setImgGenerated(true);
-                navigate("/images", { state: data });
+                const uploaded = await uploadComfy(selectedImages);
+                navigate("/images", { state: { data, uploaded } });
             }
         } catch (error) {
             console.log(error);
@@ -95,6 +114,72 @@ export default function ChatGPTUrlScreen() {
         } finally {
             setRequirementLoading(false);
         }
+    };
+
+
+
+
+
+    //select the images
+    const handleSelectImage = (image: string) => {
+        setSelectedImages((prev) => {
+            // Unselect if already selected
+            if (prev.includes(image)) {
+                return prev.filter((img) => img !== image);
+            }
+
+            // Allow only 2 selections
+            if (prev.length >= 2) {
+                return [prev[1], image];
+            }
+
+            return [...prev, image];
+        });
+    };
+
+    //upload the image to comfy
+    const uploadComfy = async (imageUrls: string[]) => {
+        const uploadedFiles: string[] = [];
+
+        for (const imageUrl of imageUrls) {
+
+            const imageResponse = await fetch(`${BackendUrl}/api/referenceimage`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({ url: imageUrl }),
+            });
+
+            if (!imageResponse.ok) {
+                console.error("Failed proxy fetch");
+                continue;
+            }
+
+            const blob = await imageResponse.blob();
+
+            const formData = new FormData();
+            formData.append("image", blob, "image.png");
+            formData.append("type", "input");
+
+            const res = await fetch("/api/upload/image", {
+                method: "POST",
+                body: formData,
+            });
+
+            if (!res.ok) {
+                console.error(await res.text());
+                continue;
+            }
+
+            const data = await res.json();
+
+            uploadedFiles.push(data.name);
+            console.log("Uploaded:", data.name);
+        }
+
+        setComfyImage(uploadedFiles);
+        return uploadedFiles;
     };
 
     return (
@@ -219,51 +304,79 @@ export default function ChatGPTUrlScreen() {
 
                         {/* Response */}
                         {!loading && responseData &&
-                        ((Array.isArray(responseData) && responseData.length > 0) ||(!Array.isArray(responseData) && Object.keys(responseData).length > 0)
-                        ) && (
-                        <div className="mt-8 space-y-6">
+                            ((Array.isArray(responseData) && responseData.length > 0) || (!Array.isArray(responseData) && Object.keys(responseData).length > 0)
+                            ) && (
+                                <div className="mt-8 space-y-6">
 
-                            {/* Content Input */}
+                                    {/* Content Input */}
 
 
-                            {/* Response Box */}
-                            <div className="bg-[#111827] border border-gray-700 rounded-2xl overflow-hidden">
-                                {/* Header */}
-                                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
+                                    {/* Response Box */}
+                                    <div className="bg-[#111827] border border-gray-700 rounded-2xl overflow-hidden">
+                                        {/* Header */}
+                                        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
 
-                                    <div>
-                                        <h2 className="text-white font-semibold text-lg cursor-pointer" title={responseData?.metadata?.title}>
-                                            {!responseData?.metadata?.title
-                                                ? "Workflow execution result"
-                                                : responseData.metadata.title.length > 30
-                                                    ? responseData.metadata.title.slice(0, 30) + "..."
-                                                    : responseData.metadata.title}
-                                        </h2>
+                                            <div>
+                                                <h2 className="text-white font-semibold text-lg cursor-pointer" title={responseData?.metadata?.title}>
+                                                    {!responseData?.metadata?.title
+                                                        ? "Workflow execution result"
+                                                        : responseData.metadata.title.length > 30
+                                                            ? responseData.metadata.title.slice(0, 30) + "..."
+                                                            : responseData.metadata.title}
+                                                </h2>
 
-                                        <p className="text-gray-400 text-sm">
-                                            Workflow execution result
-                                        </p>
+                                                <p className="text-gray-400 text-sm">
+                                                    Workflow execution result
+                                                </p>
+                                            </div>
+
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+
+                                                <span className="text-green-400 text-sm">
+                                                    Live
+                                                </span>
+                                            </div>
+
+                                        </div>
+
                                     </div>
+                                    <div className="flex flex-col md:flex-row gap-4 overflow-x-auto scrollbar-2 scrollbar-track-gray-800 scrollbar-thumb-gray-600">
+                                        {referenceImg?.map((item: string, index: number) => {
+                                            const selected = selectedImages.includes(item);
 
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                                            return (
+                                                <div
+                                                    key={index}
+                                                    onClick={() => handleSelectImage(item)}
+                                                    className={`relative cursor-pointer rounded-lg overflow-hidden border-2 transition-all flex-shrink-0 ${selected
+                                                        ? "border-blue-500"
+                                                        : "border-transparent hover:border-gray-400"
+                                                        }`}
+                                                >
+                                                    <img
+                                                        src={item}
+                                                        alt={`Reference ${index + 1}`}
+                                                        className="w-64 h-40 object-cover"
+                                                    />
 
-                                        <span className="text-green-400 text-sm">
-                                            Live
-                                        </span>
+                                                    {selected && (
+                                                        <div className="absolute top-2 right-2 bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-sm">
+                                                            ✓
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                     </div>
+                                    <div className="flex flex-col md:flex-row gap-4">
 
-                                </div>
-
-                            </div>
-                            <div className="flex flex-col md:flex-row gap-4">
-
-                                <input
-                                    type="text"
-                                    placeholder="Describe user requirement..."
-                                    value={content}
-                                    onChange={(e) => setContent(e.target.value)}
-                                    className="
+                                        <input
+                                            type="text"
+                                            placeholder="Describe user requirement..."
+                                            value={content}
+                                            onChange={(e) => setContent(e.target.value)}
+                                            className="
                                     flex-1
                                     bg-[#111827]
                                     border
@@ -279,11 +392,11 @@ export default function ChatGPTUrlScreen() {
                                     focus:ring-blue-500/30
                                     transition-all
                                 "
-                                />
+                                        />
 
-                                <button
-                                    onClick={sendResponse}
-                                    className="
+                                        <button
+                                            onClick={sendResponse}
+                                            className="
                                         cursor-pointer
                                     bg-blue-500
                                     hover:bg-blue-600
@@ -296,14 +409,14 @@ export default function ChatGPTUrlScreen() {
                                     shadow-lg
                                     hover:shadow-blue-500/30
                                 "
-                                >
-                                    {RequirementLoading ? "Sending..." : "Send Requirement"}
-                                </button>
+                                        >
+                                            {RequirementLoading ? "Sending..." : "Send Requirement"}
+                                        </button>
 
-                            </div>
+                                    </div>
 
-                        </div>
-                        )}
+                                </div>
+                            )}
 
                     </div>
 

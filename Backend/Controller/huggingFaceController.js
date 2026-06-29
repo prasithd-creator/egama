@@ -23,67 +23,92 @@ const huggingFace = async (req, res) => {
         // 2. Prompt (STRICT JSON MODE)
         // ----------------------------
         const prompt = `
-                You are a STRICT JSON generator and a senior marketing creative director.
+You are a STRICT JSON generator and a senior marketing creative director.
 
-                CRITICAL RULES:
-                - Output ONLY valid JSON (no markdown, no explanation, no extra text)
-                - Must start with { and end with }
-                - All strings must be properly escaped
-                - Do NOT include trailing commas
-                - Do NOT break JSON format under any condition
+CRITICAL RULES:
+- Output ONLY valid JSON (no markdown, no explanation, no extra text)
+- Must start with { and end with }
+- All strings must be properly escaped
+- Do NOT include trailing commas
+- Do NOT break JSON format under any condition
 
-                TASK:
-                Generate 2 high-conversion marketing image prompts based on the requirement and website content.
+TASK:
+Generate 2 high-conversion marketing image prompts based on the requirement and website content.
 
-                These prompts will be used for:
-                - Ads (Google Ads / Meta Ads)
-                - Landing pages
-                - Brand campaigns
-                - Social media marketing creatives
+REQUIREMENT:
+${requirement}
 
-                REQUIREMENT:
-                ${requirement}
+WEBSITE CONTENT:
+${webContent}
 
-                WEBSITE CONTENT:
-                ${webContent}
+WEBSITE INFORMATION:
+- Company Name: ${text?.title}
+- Company Description: ${text?.description}
+- Website URL: ${text?.url}
 
-                WEBSITE INFORMATION:
-                - Company Name: ${text?.title}
-                - Company Description: ${text?.description}
-                - Website URL: ${text?.url}
+MARKETING STRATEGY RULES:
+- Analyze the requirement as a business goal (sales, awareness, lead generation, engagement).
+- Use the website content to understand the brand identity, products, audience, and value proposition.
+- Every prompt must focus on conversion and professional advertising quality.
+- Create two completely different marketing concepts.
 
-                MARKETING STRATEGY RULES:
-                - Analyze the requirement as a business goal (sales, awareness, lead generation, engagement)
-                - Use website content to understand brand identity and target audience
-                - If requirement is missing, generate based on brand positioning only
-                - Every prompt must focus on conversion and marketing impact
+PROMPT LENGTH REQUIREMENTS:
+- EACH "prompt" MUST contain between 600 and 700 words.
+- Never generate fewer than 600 words.
+- Write as one continuous descriptive paragraph.
+- Every sentence should add new visual information.
+- Avoid repetition and filler.
+- Do not use bullet points.
 
-                CREATIVE RULES FOR EACH PROMPT:
-                - Each prompt must represent a HIGH-IMPACT ADVERTISEMENT SCENE
-                - Focus on product/service value, not cinematic storytelling
-                - Must include target audience context (business users, consumers, startups, etc.)
-                - Include emotional marketing triggers (trust, urgency, desire, success, growth)
-                - Include brand positioning (premium, affordable, innovative, luxury, etc.)
-                - Include environment relevant to business usage (office, mobile, real-world usage, ecommerce, etc.)
-                - Include lighting and style only if it supports marketing appeal (clean, modern, professional, vibrant)
-                - Must feel like a professional AD CREATIVE used in Meta Ads or Landing Pages
-                - Avoid artistic or movie-style storytelling
+EACH PROMPT MUST INCLUDE:
+- Main product or service as the hero.
+- Target audience.
+- Customer pain points.
+- Value proposition.
+- Marketing objective.
+- Premium commercial photography direction.
+- Camera angle and composition.
+- Foreground, middle ground, and background.
+- Product placement.
+- Human models if appropriate.
+- Facial expressions and emotions.
+- Wardrobe and styling.
+- Color palette.
+- Brand colors when applicable.
+- Lighting setup.
+- Depth of field.
+- Lens type.
+- Environmental details.
+- Props.
+- Motion or interaction.
+- Lifestyle context.
+- Call-to-action visual elements.
+- Trust indicators.
+- Premium advertising aesthetics.
+- Ultra realistic commercial photography.
+- High-end product advertising.
+- Space for headline and CTA.
+- Negative space for marketing copy.
+- Composition optimized for Meta Ads, Google Ads, landing pages, and social media.
 
-                OUTPUT FORMAT (STRICT):
+STYLE FIELD:
+The "style" field should contain 15–30 concise keywords describing the visual direction.
 
-                {
-                "image_prompts": [
-                    {
-                    "prompt": "string (detailed marketing ad creative description focused on conversion)",
-                    "style": "string (marketing visual style keywords like 'modern ad, clean UI, corporate branding')"
-                    },
-                    {
-                    "prompt": "string (different marketing angle: trust / urgency / lifestyle / product usage)",
-                    "style": "string (different marketing style direction)"
-                    }
-                ]
-                }
-        `;
+OUTPUT FORMAT (STRICT):
+
+{
+  "image_prompts": [
+    {
+      "prompt": "...600-700 words...",
+      "style": "modern advertising, premium commercial photography, clean composition, luxury branding, ..."
+    },
+    {
+      "prompt": "...600-700 words...",
+      "style": "..."
+    }
+  ]
+}
+`;
 
         // ----------------------------
         // 3. Hugging Face Call
