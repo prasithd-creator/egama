@@ -4,12 +4,13 @@ import workflow from "../../Comfy_Api/imageAPI-Img";
 import { AppContext } from "../../Context/createContent";
 import axios from "axios";
 import { toast } from "react-toastify";
+import RegenerateIcon from "../../assets/re_generate.svg";
 
 function Images() {
     const location = useLocation();
     const navigate = useNavigate();
     const context = useContext(AppContext);
-    const state = location.state.data as any;
+    const state = location?.state?.data?.data?.image_prompts as any;
     const responseData = state;
     const [loading, setLoading] = useState<boolean>(false);
     const [imagegenerate, setImagegenerate] = useState<any>(null);
@@ -22,8 +23,15 @@ function Images() {
     const [generateLoading, setGenerateLoading] = useState<boolean>(false);
     const referencesImg = location?.state?.uploaded;
 
-    console.log(referencesImg);
+    //combin the prompt and negative prompt
+    const combined = state.map((item: any) => ({
+        combined_prompt: `Prompt: ${item.prompt}, \nNegative Prompt: ${item.negative_prompt}`,
+    }));
+    console.log(combined);
 
+    console.log(referencesImg);
+    console.log(responseData?.data?.image_prompts);
+    console.log(state);
     /// final code
     const sleep = (ms: number) =>
         new Promise((resolve) => setTimeout(resolve, ms));
@@ -40,65 +48,63 @@ function Images() {
 
             // LOOP PROMPTS ONE BY ONE
             for (const p of prompts) {
-                const wf = structuredClone(workflow);
+                for (let i = 0; i < 5; i++) {
+                    const wf = structuredClone(workflow);
 
-                // only one prompt
-                // wf["58"].inputs.value = p;
-                // wf["57:3"].inputs.seed = Math.floor(Math.random() * 999999999);
-                // console.log("Sending:", p);
+                    // references images prompt
+                    wf["135"].inputs.text = p; // your CLIPTextEncode node
 
-                // references images prompt
-                wf["135"].inputs.text = p; // your CLIPTextEncode node
-                wf["125"].inputs.noise_seed = Math.floor(Math.random() * 999999999);
+                    wf["125"].inputs.noise_seed = Math.floor(Math.random() * 999999999);
 
 
-                if (referencesImg?.length >= 2) {
-                    wf["76"].inputs.image = referencesImg[0];
-                    wf["81"].inputs.image = referencesImg[1];
-                } else {
-                    throw new Error("Need 2 input images");
-                }
+                    if (referencesImg?.length >= 2) {
+                        wf["76"].inputs.image = referencesImg[0];
+                        wf["81"].inputs.image = referencesImg[1];
+                    } else {
+                        throw new Error("Need 2 input images");
+                    }
 
-                console.log("Sending prompt:", p);
+                    console.log("Sending prompt:", p);
 
-                // 1. SEND REQUEST
-                const res = await fetch("/api/prompt", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ prompt: wf }),
-                });
+                    // 1. SEND REQUEST
+                    const res = await fetch("/api/prompt", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ prompt: wf }),
+                    });
 
-                const data = await res.json();
-                const promptId = data.prompt_id;
+                    const data = await res.json();
+                    const promptId = data.prompt_id;
 
-                if (!promptId) continue;
+                    if (!promptId) continue;
 
-                // 2. WAIT FOR IMAGE
-                let imageUrl = null;
+                    // 2. WAIT FOR IMAGE
+                    let imageUrl = null;
 
-                for (let i = 0; i < 20; i++) {
-                    await sleep(3000);
+                    for (let i = 0; i < 20; i++) {
+                        await sleep(3000);
 
-                    const historyRes = await fetch(`/api/history/${promptId}`);
-                    const history = await historyRes.json();
-                    console.log("History:", history);
+                        const historyRes = await fetch(`/api/history/${promptId}`);
+                        const history = await historyRes.json();
+                        console.log("History:", history);
 
-                    const image =
-                        history?.[promptId]?.outputs?.["94"]?.images?.[0];
+                        const image =
+                            history?.[promptId]?.outputs?.["94"]?.images?.[0];
 
-                    if (image) {
-                        imageUrl = `http://192.168.0.161:5454/api/view?filename=${image.filename}`;
-                        break;
+                        if (image) {
+                            imageUrl = `http://192.168.0.161:5454/api/view?filename=${image.filename}`;
+                            break;
+                        }
+                    }
+
+                    if (imageUrl) {
+                        results.push(imageUrl);
+                        setRegenerate(true);
+                        setImagegenerate([...results]); // update UI live
                     }
                 }
 
-                if (imageUrl) {
-                    results.push(imageUrl);
-                    setRegenerate(true);
-                    setImagegenerate([...results]); // update UI live
-                }
             }
-
         } catch (err) {
             console.error(err);
             toast.error("Failed to generate images");
@@ -180,7 +186,7 @@ function Images() {
         return uploadedFiles;
     };
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-6">
+        <div className="min-h-screen text-white p-6">
             {/* Header */}
             <div className="flex items-center justify-between mb-10">
                 <div>
@@ -200,15 +206,17 @@ function Images() {
                         className="bg-green-500 hover:bg-green-600 cursor-pointer disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg transition-all flex items-center gap-2"
                     >
                         {loading && <div className="w-5 h-5 border-2 border-green-900 border-t-transparent rounded-full animate-spin"></div>}
+                        {!loading && reGenerate && <img src={RegenerateIcon} className="icon" alt="Regenerate" />}
                         {loading ? "Generating..." : reGenerate ? "Regenerate" : "Generate Images"}
                     </button>
                     {reGenerate &&
                         <button
                             onClick={uploadImage}
-                            disabled={loading}
-                            className="bg-blue-500 hover:bg-blue-600 cursor-pointer disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg transition-all"
+                            disabled={loading || uploading || generateLoading}
+                            className="bg-blue-500 hover:bg-blue-600 cursor-pointer disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg transition-all flex items-center gap-2"
                         >
                             {uploading && <div className="w-5 h-5 border-2 border-blue-900 border-t-transparent rounded-full animate-spin"></div>}
+                            {generateLoading && <div className="w-5 h-5 border-2 border-blue-900 border-t-transparent rounded-full animate-spin"></div>}
                             {uploading ? "Uploading..." : generateLoading ? "Generating Prompt..." : "Upload"}
                         </button>
                     }
@@ -230,14 +238,14 @@ function Images() {
                         </p>
                     </div>
 
-                    <div className="space-y-4 max-h-[600px] overflow-auto pr-2">
+                    <div className="space-y-4 max-h-[60vh] overflow-auto pr-2 scrollbar-2 scrollbar-track-gray-800 scrollbar-thumb-gray-600">
                         {(!state || state.length === 0) && (
                             <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
                                 No prompts available
                             </p>
                         )}
 
-                        {state?.map((item: any, index: number) => (
+                        {combined?.map((item: any, index: number) => (
                             <div
                                 key={index}
                                 className="flex gap-4 bg-[#111827] border border-gray-700 rounded-2xl p-4 hover:border-green-500 transition-all"
@@ -249,7 +257,7 @@ function Images() {
 
                                 {/* Text */}
                                 <p className="text-gray-300 text-sm leading-relaxed">
-                                    {item}
+                                    {item?.combined_prompt}
                                 </p>
                             </div>
                         ))}
@@ -323,6 +331,7 @@ function Images() {
                 )}
 
             </div>
+         
         </div>
     )
 }

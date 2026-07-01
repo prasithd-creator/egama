@@ -91,6 +91,14 @@ EACH PROMPT MUST INCLUDE:
 - Negative space for marketing copy.
 - Composition optimized for Meta Ads, Google Ads, landing pages, and social media.
 
+TEXT RULES:
+- Do not generate unnecessary or decorative text.
+- Do not add headlines, slogans, captions, CTA buttons, pricing, promotional copy, or watermarks.
+- Do not generate random letters, gibberish, or unreadable typography.
+- Official brand logos are allowed only if they naturally belong to the product or brand being advertised.
+- Product packaging may include realistic branding if appropriate, but avoid excessive or incorrect text.
+- The marketing message should be conveyed primarily through visuals rather than text.
+
 STYLE FIELD:
 The "style" field should contain 15–30 concise keywords describing the visual direction.
 
@@ -99,11 +107,11 @@ OUTPUT FORMAT (STRICT):
 {
   "image_prompts": [
     {
-      "prompt": "...600-700 words...",
+      "prompt": "...400-600 words...",
       "style": "modern advertising, premium commercial photography, clean composition, luxury branding, ..."
     },
     {
-      "prompt": "...600-700 words...",
+      "prompt": "...400-600 words...",
       "style": "..."
     }
   ]

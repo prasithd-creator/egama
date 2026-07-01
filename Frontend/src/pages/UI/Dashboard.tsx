@@ -1,4 +1,4 @@
-import { useState, useEffect, useContext } from "react";
+import { useState, useEffect, useContext, useRef } from "react";
 import logo from "../../assets/egama_logo.png"
 import axios from "axios";
 import { AppContext } from "../../Context/createContent";
@@ -21,6 +21,8 @@ export default function ChatGPTUrlScreen() {
     const [referenceImg, setReferenceImg] = useState<any>([]);
     const [selectedImages, setSelectedImages] = useState<string[]>([]);
     const [comfyImage, setComfyImage] = useState<any>(null);
+    const [timer, setTimer] = useState<any>(0);
+    const timerRef = useRef<any>(null);
 
     useEffect(() => {
         localStorage.setItem("responseData", JSON.stringify(responseData));
@@ -74,7 +76,14 @@ export default function ChatGPTUrlScreen() {
     //submit the requirement
     const sendResponse = async () => {
         if (!selectedImages || selectedImages.length < 2) return toast.error("Please select 2 images");
+        //loading
         setRequirementLoading(true);
+
+        //stop the timer
+        setTimer(0);
+        timerRef.current = setInterval(() => {
+            setTimer((prev: number) => prev + 1);
+        }, 1000);
         const metadata = responseData?.metadata;
 
         if (!metadata) return;
@@ -93,32 +102,32 @@ export default function ChatGPTUrlScreen() {
             metadata: updatedMetadata,
         });
 
-        console.log(updatedMetadata.title);
+        console.log(updatedMetadata);
         console.log(updatedMetadata.description);
         console.log(updatedMetadata.requirements);
         try {
             const res = await axios.post(
-                `${BackendUrl}/api/huggingface`, { text: updatedResponseData.metadata, webContent: responseData.makedown }
+                `${BackendUrl}/api/ollama`, { text: updatedResponseData.metadata, webContent: responseData.makedown }
             )
 
             if (res.data.success) {
-                const data = res.data.combinedPrompts;
+                const data = res.data;
                 console.log(data);
                 setImgGenerated(true);
                 const uploaded = await uploadComfy(selectedImages);
-                navigate("/images", { state: { data, uploaded } });
+                navigate("/images", { state: { data, uploaded, requiremnts: responseData } });
             }
         } catch (error) {
             console.log(error);
             toast.error((error as Error).message);
         } finally {
+            // Stop timer
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
             setRequirementLoading(false);
         }
     };
-
-
-
-
 
     //select the images
     const handleSelectImage = (image: string) => {
@@ -136,6 +145,8 @@ export default function ChatGPTUrlScreen() {
             return [...prev, image];
         });
     };
+
+
 
     //upload the image to comfy
     const uploadComfy = async (imageUrls: string[]) => {
@@ -159,7 +170,8 @@ export default function ChatGPTUrlScreen() {
             const blob = await imageResponse.blob();
 
             const formData = new FormData();
-            formData.append("image", blob, "image.png");
+            const extension = blob.type === "image/jpeg" ? "jpg" : blob.type === "image/webp" ? "webp" : "png";
+            formData.append("image", blob, `image.${extension}`);
             formData.append("type", "input");
 
             const res = await fetch("/api/upload/image", {
@@ -182,8 +194,16 @@ export default function ChatGPTUrlScreen() {
         return uploadedFiles;
     };
 
+
+    //formet the timer
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
+    };
+
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black">
+        <div className="min-h-screen">
 
             {/* Logo */}
             <div className="absolute top-6 left-6 flex items-center gap-3">
@@ -212,7 +232,7 @@ export default function ChatGPTUrlScreen() {
                     {/* Title */}
                     <div className="text-center mb-10">
 
-                        <h1 className="text-5xl font-bold text-white mb-3" onClick={() => navigate("/images", { state: responseData })}>
+                        <h1 className="text-3xl font-bold text-white mb-1" onClick={() => navigate("/images", { state: responseData })}>
                             AI Workflow Generator
                         </h1>
 
@@ -233,42 +253,11 @@ export default function ChatGPTUrlScreen() {
                                 placeholder="Paste your workflow URL..."
                                 value={url}
                                 onChange={(e) => setUrl(e.target.value)}
-                                className="
-                            flex-1
-                            bg-[#111827]
-                            border
-                            border-gray-600
-                            rounded-2xl
-                            px-5
-                            py-4
-                            text-white
-                            placeholder-gray-500
-                            outline-none
-                            focus:border-green-500
-                            focus:ring-2
-                            focus:ring-green-500/30
-                            transition-all
+                                className="flex-1 bg-[#111827]  border border-gray-600   rounded-2xl  px-5 py-4 text-white placeholder-gray-500 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/30 transition-all
                         "
                             />
 
-                            <button
-                                onClick={handleSubmit}
-                                disabled={loading}
-                                className="
-                            bg-green-500
-                            hover:bg-green-600
-                            text-white
-                            cursor-pointer
-                            px-8
-                            py-4
-                            rounded-2xl
-                            font-semibold
-                            transition-all
-                            disabled:opacity-50
-                            shadow-lg
-                            hover:shadow-green-500/30
-                        "
-                            >
+                            <button onClick={handleSubmit} disabled={loading} className="bg-green-500 hover:bg-green-600 text-white cursor-pointer px-8 py-4 rounded-2xl font-semibold transition-all disabled:opacity-50 shadow-lg hover:shadow-green-500/30">
                                 {loading ? "Sending..." : "Submit URL"}
                             </button>
 
@@ -376,22 +365,7 @@ export default function ChatGPTUrlScreen() {
                                             placeholder="Describe user requirement..."
                                             value={content}
                                             onChange={(e) => setContent(e.target.value)}
-                                            className="
-                                    flex-1
-                                    bg-[#111827]
-                                    border
-                                    border-gray-600
-                                    rounded-2xl
-                                    px-5
-                                    py-4
-                                    text-white
-                                    placeholder-gray-500
-                                    outline-none
-                                    focus:border-blue-500
-                                    focus:ring-2
-                                    focus:ring-blue-500/30
-                                    transition-all
-                                "
+                                            className="flex-1 bg-[#111827] border border-gray-600 rounded-2xl px-5 py-4 text-white placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
                                         />
 
                                         <button
@@ -423,6 +397,20 @@ export default function ChatGPTUrlScreen() {
                 </div>
 
             </div>
+
+
+            {
+                RequirementLoading && (
+                    <div className="absolute z-50 top-0 left-0 w-full h-full bg-black/50 overflow-hidden">
+                        <div className="flex flex-col items-center justify-center mt-6 w-full h-full">
+                            <div className="w-30 h-30 border-4 border-t-transparent rounded-full animate-spin border-white"></div>
+                            <p className="text-white animate-pulse duration-800">{formatTime(timer)}</p>
+                            <p className="text-white animate-pulse duration-800">Waiting for the response...</p>
+                        </div>
+                    </div>
+                )
+            }
         </div>
+
     );
 }

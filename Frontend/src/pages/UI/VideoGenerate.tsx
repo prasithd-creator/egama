@@ -15,6 +15,8 @@ function VideoGenerate() {
     const [videoGenerate, setVideoGenerate] = useState<any>([]);
     const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
 
+    console.log(state);
+
     useEffect(() => {
         setVideoPrompt(state?.videoPrompt);
         setImagePrompt(state?.imagePrompt);
@@ -67,7 +69,6 @@ function VideoGenerate() {
 
                 // Secondary noise (motion / variation)
                 wf["320:277"].inputs.noise_seed = seed + 1;
-
                 wf["320:301"].inputs.value = 10;
 
                 console.log("Sending:", { p, img });
@@ -160,7 +161,7 @@ function VideoGenerate() {
                         AI-generated video instructions
                     </p>
 
-                    <div className="space-y-4 max-h-[600px] overflow-auto pr-2">
+                    <div className="space-y-4 max-h-[60vh] overflow-auto pr-2 scrollbar-2 scrollbar-track-gray-800 scrollbar-thumb-gray-600 hover:scrollbar-thumb-gray-500">
                         {(!videoPrompt || videoPrompt.length === 0) && (
                             <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
                                 No prompts available

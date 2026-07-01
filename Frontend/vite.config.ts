@@ -1,16 +1,18 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import svgr from "vite-plugin-svgr";
 
 export default defineConfig({
   plugins: [
     react(),
-    tailwindcss()
+    tailwindcss(),
+    svgr()
   ],
   server: {
     proxy: {
       "/api": {
-        target: "https://watches-screens-mood-combined.trycloudflare.com",
+        target: "https://stopped-antiques-think-electronics.trycloudflare.com",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, "")

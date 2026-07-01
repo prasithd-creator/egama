@@ -200,89 +200,47 @@ const imageToVideoPrompt = async (req, res) => {
                 }
 
                 const prompt = `
-You are a senior marketing strategist, creative director, and video advertising expert.
-
-CRITICAL RULES:
-- Output ONLY valid JSON
-- No markdown
-- No explanations
-- No extra text
-- Must start with { and end with }
-- Must be valid JSON
+You are a senior marketing strategist.
 
 TASK:
-Generate ONE high-converting 10-second marketing video advertisement.
+Create a 10-second marketing video ad based on the image.
 
-IMAGE ANALYSIS:
-${images}
+INPUT:
+- Image URL: ${imageUrl}
+- Website content: ${webContent || "Not provided"}
 
-WEBSITE CONTENT:
-${webContent || "Not provided"}
+RULES:
+- Output ONLY valid JSON
+- No markdown, no extra text
+- Must be valid JSON
 
-OBJECTIVE:
-Create a premium 10-second marketing video concept based entirely on the image analysis.
+VIDEO REQUIREMENTS:
+- Duration: exactly 10 seconds
+- Structure: Hook (0–3s), Value (3–7s), CTA (7–10s)
+- High-conversion marketing style
 
-VIDEO GOALS:
-- Increase conversions
-- Generate leads
-- Improve brand awareness
-- Drive engagement
-- Promote product/service effectively
-
-VIDEO DURATION RULE:
-- TOTAL VIDEO LENGTH MUST BE EXACTLY 10 SECONDS
-- Fast-paced commercial style
-- Every second must be intentional
-
-VIDEO STRUCTURE (10s breakdown):
-- 0–3s: Powerful Hook (attention grab, problem/curiosity)
-- 3–7s: Product/Benefit showcase (value + transformation)
-- 7–10s: Strong CTA (urgency + action)
-
-MOTION INSTRUCTIONS:
-- Fast cinematic cuts
-- Smooth zoom-ins on product
-- Dynamic transitions every 1–2 seconds
-- Clean commercial pacing
-- Focus-driven camera movement
-- Premium ad aesthetic
-
-VISUAL STYLE:
-- High-end commercial advertising
-- Modern brand identity
-- Social media ad optimized
-- Meta Ads / YouTube Ads quality
-- Clean, premium, conversion-focused visuals
-
-VOICE OVER INSTRUCTIONS:
-- MUST be strictly for a 10-second video
-- Total script length: 25–35 words maximum
-- Must follow structure: Hook → Value → CTA
-- Extremely punchy and emotional
-- No filler words
-- Sound like a professional ad narrator
-- Every word must drive conversion
-- Must match fast visual cuts
-- CTA must be included in final line
-- High urgency and persuasive tone
+VOICE OVER:
+- 25–35 words max
+- Hook → Value → CTA format
+- Short, punchy, emotional
 
 OUTPUT FORMAT:
 
 {
   "video_prompt": {
-    "headline": "string (short, high-impact marketing headline)",
-    "marketing_angle": "string (core advertising strategy)",
-    "prompt": "detailed 10-second cinematic video generation prompt with scene breakdown and motion direction",
-    "voice_over_10s": "ultra-short 10-second voice-over script (25–35 words max, fully aligned to visuals)",
-    "style": "marketing keywords like premium, cinematic, UGC-style, direct response, etc.",
-    "cta": "strong call to action (1 short line)"
+    "headline": "",
+    "marketing_angle": "",
+    "prompt": "",
+    "voice_over_10s": "",
+    "style": "",
+    "cta": ""
   }
 }
 `;
 
 
                 const response = await hf.chatCompletion({
-                    model: "zai-org/GLM-4.5V",
+                    model: "Qwen/Qwen3.5-122B-A10B:deepinfra",
                     messages: [
                         {
                             role: "user",
@@ -300,7 +258,7 @@ OUTPUT FORMAT:
                             ],
                         },
                     ],
-                    max_tokens: 3000,
+                    max_tokens: 1200,
                     temperature: 0.7,
                 });
 
@@ -312,38 +270,38 @@ OUTPUT FORMAT:
                 const raw = response?.choices?.[0]?.message?.content;
 
                 if (!raw) {
-                    throw new Error(
-                        "No content returned from model"
-                    );
+                    throw new Error("No content returned from model");
                 }
+
+                console.log("\n=========== RAW MODEL RESPONSE ===========");
+                console.log(raw);
+                console.log("==========================================\n");
 
                 const cleaned = raw
                     .replace(/```json/gi, "")
                     .replace(/```/g, "")
                     .trim();
 
-                const start = cleaned.indexOf("{");
-                const end = cleaned.lastIndexOf("}");
+                let parsed;
 
-                if (start === -1 || end === -1) {
-                    throw new Error(
-                        `No JSON found in response: ${cleaned}`
-                    );
+                try {
+                    parsed = JSON.parse(cleaned);
+                } catch (e) {
+                    console.error("❌ Invalid JSON returned by model");
+                    console.error(cleaned);
+
+                    return {
+                        prompt: "Model returned invalid JSON",
+                        style: "error",
+                        error: "Invalid JSON returned by model",
+                        raw: cleaned,
+                    };
                 }
 
-                const jsonText = cleaned.slice(
-                    start,
-                    end + 1
-                );
-
-                const parsed = JSON.parse(jsonText);
-
-                return (
-                    parsed.video_prompt || {
-                        prompt: "No prompt generated",
-                        style: "unknown",
-                    }
-                );
+                return parsed.video_prompt || {
+                    prompt: "No prompt generated",
+                    style: "unknown",
+                };
             } catch (err) {
                 console.error("\n========== IMAGE FAILED ==========");
                 console.error("Image:", imageUrl);
@@ -374,9 +332,12 @@ OUTPUT FORMAT:
             }
         };
 
-        const results = await Promise.all(
-            images.map(processImage)
-        );
+        const results = [];
+
+        for (const image of images) {
+            const result = await processImage(image);
+            results.push(result);
+        }
 
         return res.status(200).json({
             success: true,
