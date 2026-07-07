@@ -2,25 +2,34 @@ import { useLocation, useNavigate } from "react-router"
 import { useEffect, useState } from "react";
 import workflow from "../../Comfy_Api/videoApi";
 import { toast } from "react-toastify";
+import axios from "axios";
+import { useContext } from "react";
+import { AppContext } from "../../Context/createContent";
 
 function VideoGenerate() {
     const location = useLocation();
     const navigate = useNavigate();
     const state = location.state as any;
+    const context = useContext(AppContext);
+    const backendUrl = context?.BackendUrl as string;
     const [loading, setLoading] = useState<boolean>(false);
     const [reGenerate, setRegenerate] = useState<boolean>(false);
     const [videoPrompt, setVideoPrompt] = useState<any>(null);
     const [imagePrompt, setImagePrompt] = useState<any>(null);
     const [imagegenerate, setImagegenerate] = useState<any>(null);
     const [videoGenerate, setVideoGenerate] = useState<any>([]);
-    const [selectedVideo, setSelectedVideo] = useState<string | null>(null);
+    const [selectedVideo, setSelectedVideo] = useState<string | null>("");
 
     console.log(state);
+    console.log(videoPrompt);
+    console.log(Array.isArray(videoPrompt));
+    console.log(typeof videoPrompt);
 
     useEffect(() => {
         setVideoPrompt(state?.videoPrompt);
         setImagePrompt(state?.imagePrompt);
         setImagegenerate(state?.comfyImage);
+
     }, []);
 
     console.log(videoPrompt);
@@ -118,10 +127,26 @@ function VideoGenerate() {
         }
     };
 
+
+    //video merger
+    const mergeVideos = async () => {
+        console.log(videoGenerate);
+
+        const res = await axios.post(
+            `${backendUrl}/api/mainMerge`,
+            {
+                videos: videoGenerate
+            }
+        );
+
+        console.log(res.data);
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-6">
+            <button onClick={mergeVideos} className="px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition cursor-pointer">Merge</button>
 
-            {/* HEADER */}
+
             <div className="flex items-center justify-between mb-10">
                 <button
                     onClick={() => navigate(-1)}
@@ -177,11 +202,11 @@ function VideoGenerate() {
                                     {index + 1}
                                 </div>
 
-                                <p>headline:{item.headline}</p>
-                                <p>{item.marketing_angle}</p>
-                                <p>{item.style}</p>
+                                <p>headline:{item?.headline}</p>
+                                <p>{item?.marketing_angle}</p>
+                                <p>{item?.style}</p>
                                 <p className="text-gray-300 text-sm leading-relaxed">
-                                    {item.prompt}
+                                    {`Prompt:${item?.prompt};\n Negative Prompt: ${item?.negative_prompt}`}
                                 </p>
                                 <p>Voice Over:{item.voice_over_10s}</p>
                                 <p>{item.cta}</p>

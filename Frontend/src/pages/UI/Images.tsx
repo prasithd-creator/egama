@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router"
-import { useState, useContext, useEffect } from "react";
+import { useState, useContext, useEffect, useRef } from "react";
 import workflow from "../../Comfy_Api/imageAPI-Img";
 import { AppContext } from "../../Context/createContent";
 import axios from "axios";
@@ -12,6 +12,7 @@ function Images() {
     const context = useContext(AppContext);
     const state = location?.state?.data?.data?.image_prompts as any;
     const responseData = state;
+    const requirements = location?.state?.requirements as any;
     const [loading, setLoading] = useState<boolean>(false);
     const [imagegenerate, setImagegenerate] = useState<any>(null);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
@@ -21,7 +22,12 @@ function Images() {
     const [uploading, setUploading] = useState<boolean>(false);
     const [comfyImage, setComfyImage] = useState<any>(null);
     const [generateLoading, setGenerateLoading] = useState<boolean>(false);
-    const referencesImg = location?.state?.uploaded;
+    const referencesImg = location?.state?.uploaded as any;
+    const companyDetails = location?.state?.details as any;
+    const webContent = location?.state?.webContent as any;
+    const [timer, setTimer] = useState<any>(0);
+    const timerRef = useRef<any>(null);
+
 
     //combin the prompt and negative prompt
     const combined = state.map((item: any) => ({
@@ -48,61 +54,61 @@ function Images() {
 
             // LOOP PROMPTS ONE BY ONE
             for (const p of prompts) {
-                for (let i = 0; i < 5; i++) {
-                    const wf = structuredClone(workflow);
 
-                    // references images prompt
-                    wf["135"].inputs.text = p; // your CLIPTextEncode node
+                const wf = structuredClone(workflow);
 
-                    wf["125"].inputs.noise_seed = Math.floor(Math.random() * 999999999);
+                // references images prompt
+                wf["135"].inputs.text = p; // your CLIPTextEncode node
+
+                wf["125"].inputs.noise_seed = Math.floor(Math.random() * 999999999);
 
 
-                    if (referencesImg?.length >= 2) {
-                        wf["76"].inputs.image = referencesImg[0];
-                        wf["81"].inputs.image = referencesImg[1];
-                    } else {
-                        throw new Error("Need 2 input images");
-                    }
+                if (referencesImg?.length >= 2) {
+                    wf["76"].inputs.image = referencesImg[0];
+                    wf["81"].inputs.image = referencesImg[1];
+                } else {
+                    throw new Error("Need 2 input images");
+                }
 
-                    console.log("Sending prompt:", p);
+                console.log("Sending prompt:", p);
 
-                    // 1. SEND REQUEST
-                    const res = await fetch("/api/prompt", {
-                        method: "POST",
-                        headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ prompt: wf }),
-                    });
+                // 1. SEND REQUEST
+                const res = await fetch("/api/prompt", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ prompt: wf }),
+                });
 
-                    const data = await res.json();
-                    const promptId = data.prompt_id;
+                const data = await res.json();
+                const promptId = data.prompt_id;
 
-                    if (!promptId) continue;
+                if (!promptId) continue;
 
-                    // 2. WAIT FOR IMAGE
-                    let imageUrl = null;
+                // 2. WAIT FOR IMAGE
+                let imageUrl = null;
 
-                    for (let i = 0; i < 20; i++) {
-                        await sleep(3000);
+                for (let i = 0; i < 20; i++) {
+                    await sleep(3000);
 
-                        const historyRes = await fetch(`/api/history/${promptId}`);
-                        const history = await historyRes.json();
-                        console.log("History:", history);
+                    const historyRes = await fetch(`/api/history/${promptId}`);
+                    const history = await historyRes.json();
+                    console.log("History:", history);
 
-                        const image =
-                            history?.[promptId]?.outputs?.["94"]?.images?.[0];
+                    const image =
+                        history?.[promptId]?.outputs?.["94"]?.images?.[0];
 
-                        if (image) {
-                            imageUrl = `http://192.168.0.161:5454/api/view?filename=${image.filename}`;
-                            break;
-                        }
-                    }
-
-                    if (imageUrl) {
-                        results.push(imageUrl);
-                        setRegenerate(true);
-                        setImagegenerate([...results]); // update UI live
+                    if (image) {
+                        imageUrl = `http://192.168.0.161:5454/api/view?filename=${image.filename}`;
+                        break;
                     }
                 }
+
+                if (imageUrl) {
+                    results.push(imageUrl);
+                    setRegenerate(true);
+                    setImagegenerate([...results]); // update UI live
+                }
+
 
             }
         } catch (err) {
@@ -117,8 +123,12 @@ function Images() {
     ///Generate the Image to Video Prompt
     const generateVideoPrompt = async (data: any) => {
         setGenerateLoading(true);
+        setTimer(0);
+        timerRef.current = setInterval(() => {
+            setTimer((prev: number) => prev + 1);
+        }, 1000);
         try {
-            const res = await axios.post(`${backendUrl}/api/imageToVideoPrompt`, { images: data });
+            const res = await axios.post(`${backendUrl}/api/ollamaVideoPrompt`, { images: data, requirements, companyDetails, webContent });
             if (res.data.success) {
                 console.log(res.data.data);
                 setVideoPrompt(res.data.data);
@@ -128,6 +138,10 @@ function Images() {
         } catch (error) {
             console.log(error);
         } finally {
+            // Stop timer
+            if (timerRef.current) {
+                clearInterval(timerRef.current);
+            }
             setGenerateLoading(false);
         }
     }
@@ -152,7 +166,6 @@ function Images() {
             setUploading(false);
         }
     }
-
 
     ///Upload the image to comfy input
     const uploadComfy = async (imageUrls: string[]) => {
@@ -184,6 +197,13 @@ function Images() {
 
         setComfyImage(uploadedFiles);
         return uploadedFiles;
+    };
+
+    //formet the timer
+    const formatTime = (seconds: number) => {
+        const mins = Math.floor(seconds / 60);
+        const secs = seconds % 60;
+        return `${mins}:${secs.toString().padStart(2, "0")}`;
     };
     return (
         <div className="min-h-screen text-white p-6">
@@ -285,7 +305,7 @@ function Images() {
                         )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-auto pr-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pr-2 max-h-[60vh] overflow-auto scrollbar-2 scrollbar-track-gray-800 scrollbar-thumb-gray-600">
                         {
                             (!imagegenerate || imagegenerate?.length === 0) && (
                                 <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
@@ -331,7 +351,19 @@ function Images() {
                 )}
 
             </div>
-         
+
+            {
+                generateLoading && (
+                    <div className="absolute z-50 top-0 left-0 w-full h-full bg-black/50 overflow-hidden">
+                        <div className="flex flex-col items-center justify-center mt-6 w-full h-full">
+                            <div className="w-30 h-30 border-4 border-t-transparent rounded-full animate-spin border-white"></div>
+                            <p className="text-white animate-pulse duration-800">{formatTime(timer)}</p>
+                            <p className="text-white animate-pulse duration-800">Waiting for the response...</p>
+                        </div>
+                    </div>
+                )
+            }
+
         </div>
     )
 }

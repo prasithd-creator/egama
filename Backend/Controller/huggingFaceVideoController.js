@@ -181,7 +181,8 @@ import hf from "../Config/huggingface.js";
 //     }
 // };
 const imageToVideoPrompt = async (req, res) => {
-    try {
+    console.log(req.body);
+    try {  
         const { images = [], webContent = "" } = req.body;
 
         if (!Array.isArray(images) || images.length === 0) {
@@ -200,43 +201,43 @@ const imageToVideoPrompt = async (req, res) => {
                 }
 
                 const prompt = `
-You are a senior marketing strategist.
+                        You are a senior marketing strategist.
 
-TASK:
-Create a 10-second marketing video ad based on the image.
+                        TASK:
+                        Create a 10-second marketing video ad based on the image.
 
-INPUT:
-- Image URL: ${imageUrl}
-- Website content: ${webContent || "Not provided"}
+                        INPUT:
+                        - Image URL: ${imageUrl}
+                        - Website content: ${webContent || "Not provided"}
 
-RULES:
-- Output ONLY valid JSON
-- No markdown, no extra text
-- Must be valid JSON
+                        RULES:
+                        - Output ONLY valid JSON
+                        - No markdown, no extra text
+                        - Must be valid JSON
 
-VIDEO REQUIREMENTS:
-- Duration: exactly 10 seconds
-- Structure: Hook (0–3s), Value (3–7s), CTA (7–10s)
-- High-conversion marketing style
+                        VIDEO REQUIREMENTS:
+                        - Duration: exactly 10 seconds
+                        - Structure: Hook (0–3s), Value (3–7s), CTA (7–10s)
+                        - High-conversion marketing style
 
-VOICE OVER:
-- 25–35 words max
-- Hook → Value → CTA format
-- Short, punchy, emotional
+                        VOICE OVER:
+                        - 25–35 words max
+                        - Hook → Value → CTA format
+                        - Short, punchy, emotional
 
-OUTPUT FORMAT:
+                        OUTPUT FORMAT:
 
-{
-  "video_prompt": {
-    "headline": "",
-    "marketing_angle": "",
-    "prompt": "",
-    "voice_over_10s": "",
-    "style": "",
-    "cta": ""
-  }
-}
-`;
+                        {
+                        "video_prompt": {
+                            "headline": "",
+                            "marketing_angle": "",
+                            "prompt": "",
+                            "voice_over_10s": "",
+                            "style": "",
+                            "cta": ""
+                        }
+                        }
+                        `;
 
 
                 const response = await hf.chatCompletion({

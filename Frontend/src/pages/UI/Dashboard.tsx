@@ -24,6 +24,8 @@ export default function ChatGPTUrlScreen() {
     const [timer, setTimer] = useState<any>(0);
     const timerRef = useRef<any>(null);
 
+    console.log(responseData);
+
     useEffect(() => {
         localStorage.setItem("responseData", JSON.stringify(responseData));
     }, [responseData]);
@@ -115,7 +117,8 @@ export default function ChatGPTUrlScreen() {
                 console.log(data);
                 setImgGenerated(true);
                 const uploaded = await uploadComfy(selectedImages);
-                navigate("/images", { state: { data, uploaded, requiremnts: responseData } });
+                console.log("Upload completed:", uploaded);
+                navigate("/images", { state: { data, uploaded, requirements: responseData.metadata.requirements, details: responseData.metadata, webContent: responseData.makedown } });
             }
         } catch (error) {
             console.log(error);
