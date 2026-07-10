@@ -19,6 +19,8 @@ function VideoGenerate() {
     const [imagegenerate, setImagegenerate] = useState<any>(null);
     const [videoGenerate, setVideoGenerate] = useState<any>([]);
     const [selectedVideo, setSelectedVideo] = useState<string | null>("");
+    const [viewMode, setViewMode] = useState<"generated" | "merged">("generated");
+    const [mergedVideo, setMergedVideo] = useState<string>("");
 
     console.log(state);
     console.log(videoPrompt);
@@ -26,7 +28,7 @@ function VideoGenerate() {
     console.log(typeof videoPrompt);
 
     useEffect(() => {
-        setVideoPrompt(state?.videoPrompt);
+        setVideoPrompt(state?.videoPrompt?.data);
         setImagePrompt(state?.imagePrompt);
         setImagegenerate(state?.comfyImage);
 
@@ -132,14 +134,24 @@ function VideoGenerate() {
     const mergeVideos = async () => {
         console.log(videoGenerate);
 
-        const res = await axios.post(
-            `${backendUrl}/api/mainMerge`,
-            {
-                videos: videoGenerate
-            }
-        );
+        try {
+            const res = await axios.post(
+                `${backendUrl}/api/mainMerge`,
+                {
+                    videos: videoGenerate
+                }
+            );
 
-        console.log(res.data);
+            if (res.data.success) {
+                setMergedVideo(res.data.output);
+                setViewMode("merged");
+            }
+
+            console.log(res.data);
+        } catch (error) {
+            console.log(error);
+        }
+
     };
 
     return (
@@ -208,7 +220,7 @@ function VideoGenerate() {
                                 <p className="text-gray-300 text-sm leading-relaxed">
                                     {`Prompt:${item?.prompt};\n Negative Prompt: ${item?.negative_prompt}`}
                                 </p>
-                                <p>Voice Over:{item.voice_over_10s}</p>
+                                <p>Voice Over:{item.voice_over_segment}</p>
                                 <p>{item.cta}</p>
                             </div>
                         ))}
@@ -224,6 +236,29 @@ function VideoGenerate() {
                                 AI video output results
                             </p>
                         </div>
+                        <div className="flex gap-3 mb-6">
+                            <button
+                                onClick={() => setViewMode("generated")}
+                                className={`px-4 py-2 rounded-lg transition ${viewMode === "generated"
+                                    ? "bg-green-600 text-white"
+                                    : "bg-gray-800 text-gray-300"
+                                    }`}
+                            >
+                                Generated Videos
+                            </button>
+
+                            <button
+                                onClick={() => setViewMode("merged")}
+                                disabled={!mergedVideo}
+                                className={`px-4 py-2 rounded-lg transition ${viewMode === "merged"
+                                    ? "bg-green-600 text-white"
+                                    : "bg-gray-800 text-gray-300"
+                                    } ${!mergedVideo ? "opacity-50 cursor-not-allowed" : ""
+                                    }`}
+                            >
+                                Merged Video
+                            </button>
+                        </div>
 
                         {videoGenerate?.length > 0 && (
                             <span className="bg-green-500 text-black px-4 py-1 rounded-full text-sm font-semibold">
@@ -232,7 +267,7 @@ function VideoGenerate() {
                         )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[600px] overflow-auto pr-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[60vh] overflow-auto pr-2 scrollbar-2 scrollbar-track-gray-800 scrollbar-thumb-gray-600">
 
                         {videoGenerate?.length === 0 && (
                             <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
@@ -240,7 +275,7 @@ function VideoGenerate() {
                             </p>
                         )}
 
-                        {videoGenerate?.map((video: string, index: number) => (
+                        {viewMode === "generated" && videoGenerate?.map((video: string, index: number) => (
                             <div
                                 key={index}
                                 onClick={() => setSelectedVideo(video)}
@@ -252,6 +287,10 @@ function VideoGenerate() {
                                 />
                             </div>
                         ))}
+
+                        {viewMode === "merged" && (
+                            <video src={mergedVideo} controls autoPlay className="w-full h-64 object-cover" />
+                        )}
 
                     </div>
                 </div>

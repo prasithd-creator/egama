@@ -58,14 +58,18 @@ export const mainMerge = async (req, res) => {
             "videos",
             "output.mp4"
         );
-
+        
 
         await mergeVideos(videoPaths, output);
 
+        const videoUrl =
+            `${req.protocol}://${req.get("host")}/videos/output.mp4`;
+
+            console.log(videoUrl);
 
         return res.json({
             success: true,
-            output
+            output: videoUrl
         });
 
 

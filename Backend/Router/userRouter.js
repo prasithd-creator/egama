@@ -8,6 +8,7 @@ import referenceimage from "../Controller/Images/referencesImage.js";
 import ollama from "../Controller/Ollama/Ollama.js";
 import ollamaVideoPrompt from "../Controller/Ollama/OllamaVideoPrompt.js";
 import { mainMerge } from "../Controller/ffmpeg/mainMerge.js";
+import ollamaScences from "../Controller/Ollama/OllamaScens.js";
 
 
 const userRouter = express.Router();
@@ -23,6 +24,7 @@ userRouter.post("/mainMerge", upload.fields([
     { name: "video1", maxCount: 1 },
     { name: "video2", maxCount: 1 }
 ]), mainMerge);
+userRouter.post("/ollamaScences", ollamaScences);
 
 
 export default userRouter;

@@ -4,6 +4,7 @@ import axios from "axios";
 import { AppContext } from "../../Context/createContent";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
+import TOPIC_SCENE_CONFIG from "../../assets/TopicScene";
 
 export default function ChatGPTUrlScreen() {
     const navigate = useNavigate();
@@ -23,8 +24,9 @@ export default function ChatGPTUrlScreen() {
     const [comfyImage, setComfyImage] = useState<any>(null);
     const [timer, setTimer] = useState<any>(0);
     const timerRef = useRef<any>(null);
+    const [requirement, setRequirement] = useState<string>("");
 
-    console.log(responseData);
+
 
     useEffect(() => {
         localStorage.setItem("responseData", JSON.stringify(responseData));
@@ -75,9 +77,12 @@ export default function ChatGPTUrlScreen() {
         }
     };
 
+
+
     //submit the requirement
     const sendResponse = async () => {
         if (!selectedImages || selectedImages.length < 2) return toast.error("Please select 2 images");
+        if (!requirement) return toast.error("Please select the requirement");
         //loading
         setRequirementLoading(true);
 
@@ -92,7 +97,7 @@ export default function ChatGPTUrlScreen() {
 
         const updatedMetadata = {
             ...metadata,
-            requirements: content,
+            requirements: requirement,
         };
         const updatedResponseData = {
             ...responseData,
@@ -104,21 +109,36 @@ export default function ChatGPTUrlScreen() {
             metadata: updatedMetadata,
         });
 
+        const selectedScene =
+            updatedMetadata.requirements as keyof typeof TOPIC_SCENE_CONFIG;
+
+        const scene = TOPIC_SCENE_CONFIG[selectedScene];
+
+        console.log(scene);
         console.log(updatedMetadata);
         console.log(updatedMetadata.description);
         console.log(updatedMetadata.requirements);
         try {
             const res = await axios.post(
-                `${BackendUrl}/api/ollama`, { text: updatedResponseData.metadata, webContent: responseData.makedown }
+                `${BackendUrl}/api/ollamaScences`, { text: updatedResponseData.metadata, webContent: responseData.makedown, scene, topic: selectedScene }
             )
 
             if (res.data.success) {
                 const data = res.data;
-                console.log(data);
-                setImgGenerated(true);
-                const uploaded = await uploadComfy(selectedImages);
-                console.log("Upload completed:", uploaded);
-                navigate("/images", { state: { data, uploaded, requirements: responseData.metadata.requirements, details: responseData.metadata, webContent: responseData.makedown } });
+                try {
+                    const res = await axios.post(
+                        `${BackendUrl}/api/ollama`, { text: updatedResponseData.metadata, webContent: responseData.makedown, topic: selectedScene, scenes: data }
+                    )
+                    const prompt = res.data;
+                    setImgGenerated(true);
+                    const uploaded = await uploadComfy(selectedImages);
+                    console.log("Upload completed:", uploaded);
+                    navigate("/images", { state: { data: prompt, uploaded, requirements: responseData.metadata.requirements, details: responseData.metadata, webContent: responseData.makedown, scenes: data } });
+                    console.log(res.data);
+                } catch (error) {
+                    console.log(error);
+                    return;
+                }
             }
         } catch (error) {
             console.log(error);
@@ -162,7 +182,7 @@ export default function ChatGPTUrlScreen() {
                 headers: {
                     "Content-Type": "application/json",
                 },
-                body: JSON.stringify({ url: imageUrl }),
+                body: JSON.stringify({ url: imageUrl, siteUrl: responseData?.metadata?.url }),
             });
 
             if (!imageResponse.ok) {
@@ -204,6 +224,10 @@ export default function ChatGPTUrlScreen() {
         const secs = seconds % 60;
         return `${mins}:${secs.toString().padStart(2, "0")}`;
     };
+
+
+
+
 
     return (
         <div className="min-h-screen">
@@ -363,30 +387,37 @@ export default function ChatGPTUrlScreen() {
                                     </div>
                                     <div className="flex flex-col md:flex-row gap-4">
 
-                                        <input
+                                        {/* <input
                                             type="text"
                                             placeholder="Describe user requirement..."
                                             value={content}
                                             onChange={(e) => setContent(e.target.value)}
                                             className="flex-1 bg-[#111827] border border-gray-600 rounded-2xl px-5 py-4 text-white placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
-                                        />
+                                        /> */}
 
-                                        <button
-                                            onClick={sendResponse}
-                                            className="
-                                        cursor-pointer
-                                    bg-blue-500
-                                    hover:bg-blue-600
-                                    text-white
-                                    px-8
-                                    py-4
-                                    rounded-2xl
-                                    font-semibold
-                                    transition-all
-                                    shadow-lg
-                                    hover:shadow-blue-500/30
-                                "
+                                        <select
+                                            value={requirement}
+                                            onChange={(e) => setRequirement(e.target.value)}
+                                            className={`flex-1 bg-[#111827] border border-gray-700 rounded-xl px-4 py-3 pr-10 text-sm font-medium outline-none cursor-pointer appearance-none transition-all duration-200 hover:border-gray-500 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 ${requirement ? "text-white" : "text-gray-500"
+                                                }`}
                                         >
+                                            <option value="" disabled>
+                                                Select the requirement
+                                            </option>
+
+                                            {Object.entries(TOPIC_SCENE_CONFIG).map(([key, value]) => (
+                                                <option
+                                                    key={key}
+                                                    value={key}
+                                                    className="text-white bg-[#111827]"
+                                                >
+                                                    {`${key.replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase())} (${value.sceneCount} scenes)`}
+                                                </option>
+                                            ))}
+                                        </select>
+
+
+                                        <button onClick={sendResponse} className={`cursor-pointer bg-blue-500 hover:bg-blue-600 text-white px-8 py-4 rounded-2xl font-semibold transition-all shadow-lg hover:shadow-blue-500/30 ${!requirement ? "opacity-50 cursor-not-allowed" : ""}`}>
                                             {RequirementLoading ? "Sending..." : "Send Requirement"}
                                         </button>
 
@@ -400,8 +431,8 @@ export default function ChatGPTUrlScreen() {
                 </div>
 
             </div>
-
-
+            
+            {/* resopnse Loading */}
             {
                 RequirementLoading && (
                     <div className="absolute z-50 top-0 left-0 w-full h-full bg-black/50 overflow-hidden">

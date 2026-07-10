@@ -1,13 +1,17 @@
 import axios from "axios";
 
 const ollamaVideoPrompt = async (req, res) => {
+
     try {
         const {
             images = [],
             requirements = "",
             webContent = "",
             companyDetails = {},
+            scenes = [],
         } = req.body;
+
+        console.log(scenes);
 
         if (!Array.isArray(images) || images.length === 0) {
             return res.status(400).json({
@@ -16,7 +20,7 @@ const ollamaVideoPrompt = async (req, res) => {
             });
         }
 
-        const processImage = async (imageUrl) => {
+        const processImage = async (imageUrl, scenes) => {
             try {
                 console.log("Processing:", imageUrl);
 
@@ -33,79 +37,79 @@ const ollamaVideoPrompt = async (req, res) => {
                 console.log("Base64 Start:", base64.substring(0, 30));
 
                 const prompt = `
-                                    You are FIVE roles merged into one pass: STORY ARCHITECT, PROMPT ENGINEER (LTX-2.3 specialist), CREATIVE ART DIRECTOR, DP/CAMERAMAN, MARKETING MANAGER.
+                                     You are FIVE roles merged into one pass: STORY ARCHITECT, PROMPT ENGINEER (LTX-2.3 specialist), CREATIVE ART DIRECTOR, DP/CAMERAMAN, MARKETING MANAGER. Apply all five lenses internally, then output ONE unified 10-second photoreal video clip concept for the single scene provided below.
 
-                                    RULES: Output ONLY valid JSON. Must start with { end with }.
+                                        RULES: Escape all quotes inside strings. Output ONLY valid JSON. No markdown, no explanations, no extra text. No newline characters inside string values.
 
-                                    INPUT:
-                                    Requirement: ${requirements}
-                                    Company: ${companyDetails.title || "null"}
-                                    Description: ${companyDetails.description || "null"}
-                                    Website: ${companyDetails.url || "null"}
-                                    Website Content: ${webContent || "Not provided"}
+                                        INPUT:
+                                        Requirement: ${requirements}
+                                        Company: ${companyDetails.title || "null"}
+                                        Description: ${companyDetails.description || "null"}
+                                        Website: ${companyDetails.url || "null"}
+                                        Website Content: ${webContent || "Not provided"}
+                                        Scene: ${JSON.stringify(scenes)}
 
-                                    CAST RULE: Any human shown must be Indian...
+                                        SINGLE-CLIP RULE: This is a standalone 10-second clip, not part of a stitched sequence. It must fully serve its own scene's beat (given in Scene above) and read as a complete, self-contained moment.
+                                        - If the scene's beat is a hook, problem, or value beat, let the clip breathe in that beat only — it does not need to resolve into a CTA.
+                                        - If the scene's beat is a final/hero_close/CTA beat, the clip should visually and narratively resolve on the product/subject.
+                                        - NO readable text, captions, subtitles, or overlays on screen at any point — carry brand identity purely through color, shape, material, and motion.
 
-                                    "You are FIVE roles merged into one pass: STORY ARCHITECT, PROMPT ENGINEER (LTX-2.3 specialist), CREATIVE ART DIRECTOR, DP/CAMERAMAN, MARKETING MANAGER. Apply all five lenses internally, then output one unified 10-second photoreal video ad concept.
+                                        STORY ARCHITECT (runs first, silently, once): Read Website Content + Requirement + the Scene to classify what is being sold — physical product, SaaS/software/app, or service — and confirm the narrative purpose of this specific beat. Choose the action to fit that classification instead of defaulting to a generic hero-shot:
+                                        Physical product → tactile hero-shot (surface, material, light interacting with the object)
+                                        SaaS/tool/app → workflow-in-action or before/after transformation, shown through human hands/posture/environment, never through screen text or UI
+                                        Service → human-outcome moment (a person experiencing the result of the service)
+                                        Do not output this classification. Let it silently shape what happens in the clip. If a human appears, they follow CAST RULE below.
 
-                                    RULES: Escape all quotes inside strings. Output ONLY valid JSON. No markdown, no explanations, no extra text. No newline characters inside string values.
+                                        CAST RULE: Any human shown must be Indian — describe them through physical/regional cues (skin tone, hair, features, attire if relevant to context e.g. casual Indian office wear, everyday Indian home setting) without naming ethnicity as a label. Keep it natural and contextual, not a checklist. If the story doesn't require a human, skip this entirely — do not force a person into the frame.
 
-                                    INPUT:
-                                    WEBSITE CONTENT: ${webContent || "Not provided"}
+                                        LTX-2.3 PROMPT RULES (apply to the "prompt" field):
+                                        Single flowing paragraph, present tense, 6-8 sentences covering the full 10s timeline of this clip. Order: Subject → Action → Lighting/Environment → Camera → Lens → Audio. Use physical/behavioral cues, not emotion words (e.g. "shoulders slumped" not "sad"). No readable text, logos, or signage — carry brand via color, shape, material only. One dominant action, smooth physically plausible motion, no chaotic/stacked movement. Honor the scene's given scene_description and camera_composition — translate them into LTX-2.3 form rather than inventing a new visual idea.
 
-                                    CAST RULE: Any human shown must be Indian — describe them through physical/regional cues (skin tone, hair, features, attire if relevant to context e.g. casual Indian office wear, everyday Indian home setting) without naming ethnicity as a label. Keep it natural and contextual, not a checklist. If the story doesn't require a human, skip this entirely — do not force a person into the frame.
+                                        ENGINEER: Lock product/subject geometry, material, color, and identity from the input; keep background flexible. Make every action explicit — nothing implied. Translate the Story Architect's chosen beat into a concrete, filmable action.
 
-                                    LTX-2.3 PROMPT RULES (apply to "prompt" field):
-                                    Single flowing paragraph, present tense, 6-8 sentences covering full 10s timeline. Order: Subject → Action → Lighting/Environment → Camera → Lens → Audio. Use physical/behavioral cues, not emotion words (e.g. "shoulders slumped" not "sad"). No readable text, logos, or signage — carry brand via color, shape, material only. One dominant action per beat, smooth physically plausible motion, no chaotic/stacked movement. The camera move must resolve on the product/subject by the end.
+                                        ART DIRECTOR: Define one concrete light source, color temperature, and texture detail (condensation, fabric weave, skin, dust, glare), consistent with the locked identity and with the beat's tone (e.g. flatter/harsher light for problem beats, premium key light for hero/close beats). No vague mood words ("moody," "sleek") — only physical descriptors.
 
-                                    ROLE LOGIC (in order):
+                                        DP: Choose exactly ONE camera move, kept MINIMAL in distance/speed — a subtle push-in, a slight drift, a gentle settle, or a near-lock-off with barely-perceptible motion. Cinematic quality must come from lens choice, depth of field, framing, and light — not from a big or fast move. No sweeping dolly, no wide orbit, no whip or rapid reframe. There are no cuts and no move-changes within the clip. Name the lens (35/50/85mm), aperture/DOF, and a real-camera anchor (e.g. Sony FX6 documentary feel) for natural grain and motion, not synthetic-smooth CGI motion. If this is the final/hero_close beat, explicitly resolve the move on the product/subject; otherwise end mid-motion.
 
-                                    STORY ARCHITECT (runs first, silently): Read WEBSITE CONTENT + Requirement to classify what is being sold — physical product, SaaS/software/app, or service. Choose the narrative arc that fits that classification instead of defaulting to a generic hero-shot:
-                                    Physical product → tactile hero-shot (surface, material, light interacting with the object)
-                                    SaaS/tool/app → workflow-in-action or before/after transformation, shown through human hands/posture/environment, never through screen text or UI
-                                    Service → human-outcome moment (a person experiencing the result of the service)
-                                    Do not output this classification. Let it silently shape what happens in each beat below. If a human appears, they follow CAST RULE above.
+                                        MARKETING: Define the viewer's feeling and intended action, tied to the conversion goal implied by this scene's narrative purpose. Since no on-screen text is allowed, push brand recall entirely through visual identity — color, material, shape, motion signature — not slogans. Only carry an explicit CTA feeling if this is the final beat.
 
-                                    ENGINEER: Lock product/subject geometry, material, color, and identity from the input; keep background flexible. Make every action explicit — nothing implied. Translate the Story Architect's chosen arc into concrete, filmable actions.
+                                        VOICE OVER: Decide ONE narrator identity (gender, tone, pitch, pacing, accent) for this clip and describe it fully in a "voice_profile" object. Write a single "voice_over_segment" for this scene's beat — a self-contained line if this is the only clip, or a line that reads naturally as part of a larger script if the scene metadata indicates it's one of several. Word count: roughly 4-6 words per second of narration, human narrator pacing, no filler. Only land on an explicit CTA line if this is the final/hero_close beat.
 
-                                    ART DIRECTOR: Define one concrete light source, color temperature, and texture detail (condensation, fabric weave, skin, dust, glare) consistent with the locked identity. No vague mood words ("moody," "sleek") — only physical descriptors.
+                                        CRITICAL — DO NOT INVENT IDENTIFIERS: The "scene_number" and "beat" fields must be copied EXACTLY from the Scene input above (Scene.scene_number and Scene.beat or equivalent field names present in the input JSON). Do not invent, renumber, reset to 0, increment, or guess these values under any circumstance — read them directly from the Scene input and reproduce them unchanged.
 
-                                    DP: Choose exactly ONE camera move for the entire 10 seconds, and keep the move MINIMAL in distance/speed — a subtle push-in, a slight drift, a gentle settle, or a near-lock-off with barely-perceptible motion. Cinematic quality must come from lens choice, depth of field, framing, and light — not from a big or fast move. No sweeping dolly, no wide orbit, no whip or rapid reframe. There are no cuts and no move-changes. The three story beats (hook / value / CTA) must emerge from what enters or exits frame and from where the minimal move resolves — not from separate shots. Name the lens (35/50/85mm), aperture/DOF, and a real-camera anchor (e.g. Sony FX6 documentary feel) for natural grain and motion, not synthetic-smooth CGI motion. State explicitly where the move resolves at the end (must land on the product/subject).
+                                        STRICT SCHEMA COMPLIANCE:
+                                        Every field listed in the OUTPUT JSON structure below is REQUIRED and must appear in every response, with no exceptions. Do not omit, skip, or leave blank any field — including negative_prompt, voice_profile (all 5 sub-fields), voice_over_segment, style, ltx_settings_recommendation, and creative_rationale (minimum 3 items). If a field seems repetitive or less important for a given scene, still populate it fully — do not shorten the response by dropping fields. Before finalizing your response, mentally verify all fields are present and non-empty, and that scene_number/beat exactly match the Scene input.
 
-                                    MARKETING: Define the viewer's feeling and intended action, tied to a conversion goal. Since no on-screen text is allowed, push brand recall entirely through visual identity — color, material, shape, motion signature — not slogans.
-
-                                    STRUCTURE (folded into ONE minimal continuous camera move — no cuts between beats):
-                                    0-3s hook (one clear action, camera begins its minimal move) → 3-7s product/benefit beat (material + light become visible as the move continues barely) → 7-10s CTA beat (the same minimal move settles and resolves on the product/subject).
-                                    All three beats occur within the single minimal camera move defined by DP. Beats are reframing moments within one take, not shot boundaries.
-
-                                    VOICE OVER: 25-35 words max, Hook→Value→CTA, punchy, no filler, human narrator pacing, CTA in final line."
-
-                                    OUTPUT JSON:
-                                    {
-                                    "video_prompt": {
-                                        "headline": "string",
-                                        "marketing_angle": "string",
-                                        "prompt": "single flowing paragraph per LTX-2.3 rules above, 6-8 sentences, full 10s timeline, one minimal continuous camera move only, Indian cast if humans present",
-                                        "negative_prompt": "morphing, distortion, warping, flicker, jitter, stutter, shaky camera, temporal artifacts, low quality, text, watermark, logo, cartoon, CGI, plastic skin, fused fingers, inconsistent lighting, jump cuts, scene changes, multiple angles, edit transitions, camera cuts, sweeping camera movement, fast dolly, whip pan, wide orbit, excessive camera motion",
-                                        "voice_over_10s": "25-35 word script",
+                                        OUTPUT JSON:
+                                        {
+                                        "scene_number": ${scenes.scene_number},
+                                        "beat": "MUST exactly match Scene.beat from the input — do not invent a value",
+                                        "prompt": "single flowing paragraph per LTX-2.3 rules above, 6-8 sentences, this scene's beat only, one minimal continuous camera move, Indian cast if humans present, no resolving/closing shot unless this is the final beat",
+                                        "negative_prompt": "morphing, distortion, warping, flicker, jitter, stutter, shaky camera, temporal artifacts, low quality, text, watermark, logo, cartoon, CGI, plastic skin, fused fingers, inconsistent lighting, jump cuts, scene changes, multiple angles, edit transitions, camera cuts, sweeping camera movement, fast dolly, whip pan, wide orbit, excessive camera motion, end card, closing graphic",
+                                        "voice_profile": {
+                                            "gender": "string",
+                                            "tone": "string",
+                                            "pitch": "string",
+                                            "pacing": "string",
+                                            "accent": "string"
+                                        },
+                                        "voice_over_segment": "self-contained narration for this scene, spoken in voice_profile above, includes CTA line only if this is the final beat",
                                         "style": "premium, cinematic, photoreal, documentary-grade, direct response, single minimal continuous take",
-                                        "cta": "1 short line",
                                         "ltx_settings_recommendation": "steps 30-40, CFG 3.0-3.5, 24fps",
                                         "creative_rationale": ["bullet1", "bullet2", "bullet3"]
-                                    }
-                                    }`
+                                        }`
 
 
 
                 // Send the request and model for the Ollama
                 const body = {
-                    model: "llava:latest",
+                    model: "qwen2.5vl:3b",
                     stream: false,
                     format: "json",
 
                     options: {
                         temperature: 0.1,
-                        num_predict: 1500
+                        num_predict: 700
                     },
 
                     messages: [
@@ -162,12 +166,11 @@ const ollamaVideoPrompt = async (req, res) => {
 
                     const parsed = JSON.parse(cleanJson);
 
-                    return parsed.video_prompt;
+                    return parsed;
 
                 } catch (err) {
-
                     console.log("JSON FAILED");
-
+                    console.error(err);
                     console.log(cleanJson);
 
                     return {
@@ -186,10 +189,23 @@ const ollamaVideoPrompt = async (req, res) => {
             }
         };
 
-        const results = await Promise.all(
-            images.map(processImage)
-        );
+        // const results = [];
 
+        // for (let i = 0; i < images.length; i++) {
+
+        //     const result = await processImage(
+        //         images[i],
+        //         scenes[i]
+        //     );
+
+        //     results.push(result);
+        // }
+
+        const results = await Promise.all(
+            images.map((image, index) =>
+                processImage(image, scenes[index])
+            )
+        );
         return res.status(200).json({
             success: true,
             total: results.length,
