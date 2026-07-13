@@ -333,7 +333,7 @@ function Images() {
                 console.log(res.data);
                 setVideoPrompt(res.data);
                 const uploaded = await uploadComfy(data);
-                navigate("/videos", { state: { details: responseData, videoPrompt: res.data, image: data, comfyImage: uploaded } });
+                // navigate("/videos", { state: { details: responseData, videoPrompt: res.data, image: data, comfyImage: uploaded } });
             }
         } catch (error) {
             console.log(error);

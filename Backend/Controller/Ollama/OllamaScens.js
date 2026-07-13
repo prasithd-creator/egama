@@ -82,6 +82,7 @@ const ollamaScences = async (req, res) => {
                                     5. No markdown code blocks are used.
                             }`
             },
+            { "done": false },
             {
 
                 role: "user",
@@ -101,7 +102,7 @@ const ollamaScences = async (req, res) => {
         const response = await axios.post("http://127.0.0.1:11434/api/chat",
             {
                 model: "gemma3:4b",
-                stream: false,
+                stream: true,
                 format: "json",
                 messages,
                 options: {

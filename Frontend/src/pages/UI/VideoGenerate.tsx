@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router"
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import workflow from "../../Comfy_Api/videoApi";
 import { toast } from "react-toastify";
 import axios from "axios";
@@ -21,6 +21,8 @@ function VideoGenerate() {
     const [selectedVideo, setSelectedVideo] = useState<string | null>("");
     const [viewMode, setViewMode] = useState<"generated" | "merged">("generated");
     const [mergedVideo, setMergedVideo] = useState<string>("");
+    const cancelledRef = useRef(false);
+    const [progress, setProgress] = useState(0);
 
     console.log(state);
     console.log(videoPrompt);
@@ -96,6 +98,35 @@ function VideoGenerate() {
 
                 if (!promptId) continue;
 
+                const ws = new WebSocket("ws://192.168.0.161:5454/ws");
+
+                ws.onmessage = (event) => {
+                    const msg = JSON.parse(event.data);
+
+                    if (msg.type === "progress") {
+                        const { value, max } = msg.data;
+                        setProgress(Math.round((value / max) * 100));
+                    }
+
+                    if (
+                        msg.type === "executing" &&
+                        msg.data.node === null &&
+                        msg.data.prompt_id === promptId
+                    ) {
+                        setProgress(100);
+                        ws.close();
+                    }
+                };
+
+
+                for (let i = 0; i < 20; i++) {
+
+                    if (cancelledRef.current) {
+                        ws.close();
+                        break;
+                    }
+                }
+
                 // 2. POLLING
                 let videoUrl = null;
 
@@ -154,6 +185,7 @@ function VideoGenerate() {
 
     };
 
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-6">
             <button onClick={mergeVideos} className="px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition cursor-pointer">Merge</button>
@@ -187,6 +219,29 @@ function VideoGenerate() {
                             : "Generate Video"}
                 </button>
             </div>
+
+            {/* ProgressBar */}
+            {loading && (
+                <div className="mb-4 w-full">
+                    <div className="flex justify-between mb-2">
+                        <span className="text-sm font-medium text-gray-300">
+                            Generating...
+                        </span>
+                        <span className="text-sm font-semibold text-green-600">
+                            {progress}%
+                        </span>
+                    </div>
+
+                    <div className="w-full h-2 bg-gray-400 rounded-full overflow-hidden">
+                        <div
+                            className="h-full rounded-full bg-gradient-to-r from-green-400 via-green-500 to-emerald-600 transition-all duration-500 ease-in-out"
+                            style={{
+                                width: `${progress}%`,
+                            }}
+                        />
+                    </div>
+                </div>
+            )}
 
             {/* MAIN GRID */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[calc(100vh-200px)]">
