@@ -1,8 +1,21 @@
 import axios from "axios";
 import fixJson from "./jsonFix.ts";
+import progressStore from "../../utils/OllamaProgressStore.js";
+import ImagePrompt from "../../Models/imagePrompt.ts";
 
 const ollamaScences = async (req, res) => {
+    const jobId = Date.now().toString();
+    progressStore.set(jobId, {
+        progress: 0,
+        characters: 0,
+        scenes: 0,
+        remaining: null,
+        status: "running"
+    });
+
     try {
+        res.json({ jobId });
+
         console.log(req.body);
         const { scene, topic, text, webContent } = req.body;
 
@@ -38,6 +51,59 @@ const ollamaScences = async (req, res) => {
                             - Vary shot type across scenes — do not repeat the same framing back to back.
                             - This is a stunning, best-in-class composition every time: think documentary-grade, real-camera, Sony FX6-style naturalism, not a synthetic or CGI look.
 
+                            CONTINUITY DIRECTOR (Highest Priority)
+
+                        All scenes belong to ONE continuous film, not separate images.
+
+                        Maintain continuity across every scene unless the assigned beat explicitly requires a change.
+
+                        Keep consistent:
+                        - Same main character(s)
+                        - Same facial features
+                        - Same hairstyle
+                        - Same clothing
+                        - Same accessories
+                        - Same product appearance
+                        - Same product size, color, material and proportions
+                        - Same location family
+                        - Same architecture
+                        - Same furniture and props
+                        - Same weather
+                        - Same time of day
+                        - Same lighting direction
+                        - Same color palette
+                        - Same visual style
+                        - Same camera realism
+                        - Same cinematic quality
+
+                        If Scene 1 introduces a person holding the product in a modern kitchen, Scene 2 should naturally continue from that environment unless the beat specifically transitions elsewhere.
+
+                        Every scene should feel like it happens seconds after the previous one.
+
+                        Characters should preserve body proportions, age, ethnicity, skin tone, hairstyle, clothing condition, accessories, and emotional progression.
+
+                        Objects introduced in earlier scenes should remain where they logically belong unless they are intentionally moved by the action.
+
+                        The product must never change its design, geometry, material, finish, color, branding placement, or scale.
+
+                        Environmental continuity is mandatory:
+                        - Keep consistent wall colors
+                        - Floor materials
+                        - Furniture
+                        - Windows
+                        - Background objects
+                        - Outdoor conditions
+                        - Lighting direction
+                        - Shadows
+
+                        Camera continuity:
+                        Each shot should naturally connect to the previous shot using professional film grammar.
+                        The camera may change framing, lens, and movement, but should feel like it belongs to the same filming session.
+
+                        Only change environments when the beat explicitly requires a new location (for example: Before → After, Factory → Home, Outdoor → Indoor).
+
+                        Think like a Hollywood continuity supervisor reviewing every frame.
+
                             MARKETING MANAGER:
                             - Tie each scene to the conversion goal implied by its beat.
                             - Push brand identity purely through visual elements (color, shape, material, environment) since no text or logo will ever appear on screen.
@@ -47,7 +113,13 @@ const ollamaScences = async (req, res) => {
                             Output format (exactly this shape, ${scene.sceneCount} entries in "scenes", in beat order):
                            OUTPUT JSON FORMAT:
 
-                                    Return exactly this structure:
+                                  IMPORTANT:
+                                        Every value must contain ONLY its own information.
+                                        Never put camera information inside scene_description.
+                                        Never put duration inside beat.
+                                        Never put narrative_purpose inside scene_description.
+                                        
+                                        Return exactly:
 
                                     {
                                     "screenplay": {
@@ -82,9 +154,7 @@ const ollamaScences = async (req, res) => {
                                     5. No markdown code blocks are used.
                             }`
             },
-            { "done": false },
             {
-
                 role: "user",
                 content: `
                             Requirement: ${text.requirements}
@@ -93,94 +163,273 @@ const ollamaScences = async (req, res) => {
                             Website: ${text.url}
                             Website Content: ${webContent}
                             `
-
             }
         ];
 
         console.log("Sending to Ollama..");
 
-        const response = await axios.post("http://127.0.0.1:11434/api/chat",
-            {
-                model: "gemma3:4b",
-                stream: true,
-                format: "json",
-                messages,
-                options: {
-                    temperature: 0.7,
-                    num_predict: 12000
-                }
+        const MAX_RETRIES = 3;
 
-            }, {
-            headers: {
-                "Content-Type": "application/json"
-            }
-        });
-
-        console.log("Raw Ollama Response:");
-        console.dir(response.data, { depth: null });
-
-        const raw = response.data?.message?.content;
-
-        if (!raw) {
-            throw new Error("No content returned from Ollama");
-        }
-
-        console.log("Raw Model Output:");
-        console.log(raw);
-
-        let cleanJson = raw
-            .replace(/```json/g, "")
-            .replace(/```/g, "")
-            .replace(/\\_/g, "_")
-            .trim();
-
-
-        // Extract JSON only
-        const start = cleanJson.indexOf("{");
-        const end = cleanJson.lastIndexOf("}");
-
-        if (start === -1) {
-            throw new Error("No JSON found");
-        }
-
-        cleanJson = cleanJson.substring(
-            start,
-            end !== -1 ? end + 1 : cleanJson.length
-        );
-
-
-        // Remove invalid control characters
-        cleanJson = cleanJson.replace(/[\u0000-\u001F]+/g, " ");
-
-
-        // Repair missing brackets
-        cleanJson = fixJson(cleanJson);
-
-
-        try {
-
-            const parsed = JSON.parse(cleanJson);
-
-            return res.status(200).json({
-                success: true,
-                data: parsed
+        const generateScreenplay = async (messages, retry = 0) => {
+            const response = await fetch("http://127.0.0.1:11434/api/chat", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    model: "gemma3:4b",
+                    stream: true,
+                    format: "json",
+                    messages,
+                    options: {
+                        temperature: 0.7,
+                        num_predict: 12000
+                    }
+                })
             });
 
-        } catch (err) {
 
-            console.log("JSON FAILED");
-            console.log(cleanJson);
+            if (!response.ok) {
+                throw new Error("Failed to connect to Ollama");
+            }
 
-            return {
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+
+            let raw = "";
+            let buffer = "";
+            let generatedScenes = 0;
+            let totalCharacters = 0;
+
+            const startTime = Date.now();
+
+            console.log("\nOllama Generation Started...\n");
+            if (retry > 0) {
+                console.log(`(retry attempt ${retry}/${MAX_RETRIES})`);
+            }
+
+            const estimatedTotalCharacters = scene.sceneCount * 1450;
+
+            progressStore.set(jobId, {
+                progress: 0,
+                characters: 0,
+                scenes: 0,
+                remaining: null,
+                status: "running",
+                retry
+            });
+
+            const progressTimer = setInterval(() => {
+                const elapsed = (Date.now() - startTime) / 1000;
+
+                let progress = (totalCharacters / estimatedTotalCharacters) * 100;
+                progress = Math.min(progress, 99);
+
+                const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
+                const remaining = estimatedTotal - elapsed;
+
+                const barLength = 30;
+                const filled = Math.round((progress / 100) * barLength);
+                const bar = "█".repeat(filled) + "░".repeat(barLength - filled);
+
+                console.clear();
+
+                progressStore.set(jobId, {
+                    progress: Number(progress.toFixed(1)),
+                    characters: totalCharacters,
+                    scenes: generatedScenes,
+                    elapsed: Number(elapsed.toFixed(1)),
+                    remaining: remaining > 0 ? Number(remaining.toFixed(1)) : null,
+                    status: "running"
+                });
+
+                console.log("====================================");
+                console.log("       OLLAMA GENERATION STATUS");
+                console.log("====================================");
+                console.log(`Progress : ${progress.toFixed(1)} %`);
+                console.log(`[${bar}]`);
+                console.log(`Loaded   : ${totalCharacters} chars`);
+                console.log(`Scenes   : ${generatedScenes}/${scene.sceneCount}`);
+                console.log(`Elapsed  : ${elapsed.toFixed(1)} sec`);
+                console.log(`Remaining: ${remaining > 0 ? remaining.toFixed(1) : "--"} sec`);
+                console.log("====================================");
+            }, 1000);
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                const lines = buffer.split("\n");
+                buffer = lines.pop() || "";
+
+                for (const line of lines) {
+                    if (!line.trim()) continue;
+
+                    try {
+                        const json = JSON.parse(line);
+
+                        if (json.message?.content) {
+                            raw += json.message.content;
+                            totalCharacters += json.message.content.length;
+
+                            generatedScenes =
+                                (raw.match(/"scene_number"\s*:/g) || []).length;
+                        }
+
+                        if (json.done) {
+                            clearInterval(progressTimer);
+
+                            const totalTime = (Date.now() - startTime) / 1000;
+
+                            console.clear();
+                            console.log("====================================");
+                            console.log("       ✅ GENERATION COMPLETE");
+                            console.log("====================================");
+                            console.log("Progress : 100%");
+                            console.log(`[${"█".repeat(30)}]`);
+                            console.log(`Scenes   : ${scene.sceneCount}/${scene.sceneCount}`);
+                            console.log(`Total Time : ${totalTime.toFixed(2)} sec`);
+                            console.log(`Prompt Tokens    : ${json.prompt_eval_count}`);
+                            console.log(`Generated Tokens : ${json.eval_count}`);
+                            console.log(
+                                `Generation Time  : ${(json.eval_duration / 1_000_000_000).toFixed(2)} sec`
+                            );
+                            console.log(
+                                `Tokens / Second  : ${(
+                                    json.eval_count / (json.eval_duration / 1_000_000_000)
+                                ).toFixed(2)}`
+                            );
+                            console.log("====================================");
+                        }
+                    } catch {
+                        // Ignore incomplete JSON
+                    }
+                }
+            }
+
+            // Empty response regeneration
+            if (!raw || raw.trim().length === 0) {
+
+                if (retry < MAX_RETRIES) {
+
+                    console.log(
+                        `Empty response from Ollama. Retrying ${retry + 1}/${MAX_RETRIES}`
+                    );
+
+
+                    return generateScreenplay(messages, retry + 1);
+                }
+
+
+                throw new Error(
+                    "Ollama returned empty response after retries"
+                );
+            }
+
+            let cleanJson = raw
+                .replace(/```json/g, "")
+                .replace(/```/g, "")
+                .trim();
+
+            const start = cleanJson.indexOf("{");
+            const end = cleanJson.lastIndexOf("}");
+
+            cleanJson = cleanJson.substring(start, end + 1);
+            cleanJson = cleanJson.replace(/[\u0000-\u001F]+/g, " ");
+            cleanJson = fixJson(cleanJson);
+
+            try {
+                return JSON.parse(cleanJson);
+            } catch (err) {
+                if (retry < MAX_RETRIES) {
+                    console.log(
+                        `Invalid JSON from Ollama. Retrying ${retry + 1}/${MAX_RETRIES}...`
+                    );
+
+                    // Tell the model exactly why it is being retried
+                    messages.push({
+                        role: "user",
+                        content:
+                            "Your previous response was invalid JSON. Regenerate the ENTIRE response. Return ONLY valid JSON matching the required schema. Do not include markdown or explanations."
+                    });
+
+                    return generateScreenplay(messages, retry + 1);
+                }
+
+                console.log("JSON FAILED after retries");
+                console.log(cleanJson);
+                throw new Error("Failed to generate valid JSON after retries.");
+            }
+        };
+
+        generateScreenplay(messages)
+            .then(async (parsed) => {
+                progressStore.set(jobId, {
+                    progress: 100,
+                    status: "completed",
+                    data: parsed
+                });
+
+                const category = text.title;
+                const topic = parsed.screenplay.topic; // testimonials
+
+                let imagePrompt = await ImagePrompt.findOne({
+                    category
+                });
+
+                if (!imagePrompt) {
+                    imagePrompt = new ImagePrompt({
+                        category,
+                        topics: []
+                    });
+                }
+
+                // Check topic folder
+                let topicFolder = imagePrompt.topics.find(
+                    (item) => item.name === topic
+                );
+
+                if (!topicFolder) {
+                    imagePrompt.topics.push({
+                        name: topic,
+                        scene_prompts: [parsed]
+                    });
+                } else {
+                    topicFolder.scene_prompts = [parsed];
+                }
+
+                await imagePrompt.save();
+
+                console.log("Saved successfully");
+
+                console.log("Generation finished");
+            })
+            .catch((err) => {
+                console.error(err);
+                progressStore.set(jobId, {
+                    progress: 0,
+                    status: "failed",
+                    error: err.message
+                });
+            });
+    } catch (err) {
+        console.error(err);
+
+        progressStore.set(jobId, {
+            progress: 0,
+            status: "failed",
+            error: err.message
+        });
+
+        if (!res.headersSent) {
+            return res.status(500).json({
                 success: false,
-                error: "Invalid JSON",
-                raw: cleanJson
-            };
+                error: err.message
+            });
         }
-
-    } catch (error) {
-        console.log(error);
     }
-}
+};
 
 export default ollamaScences;

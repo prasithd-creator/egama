@@ -47,12 +47,12 @@ const TOPIC_SCENE_CONFIG = {
         ]
     },
     testimonials: {
-        sceneCount: 4,
+        sceneCount: 1,
         beats: [
             { id: 1, beat: "person_context", goal: "Real-feeling environment shot establishing the type of person/customer, product not yet central." },
-            { id: 2, beat: "product_in_use", goal: "Same person naturally using the product in their environment." },
-            { id: 3, beat: "genuine_moment", goal: "Candid reaction moment implying satisfaction/relief/delight (no staged smiling-at-camera)." },
-            { id: 4, beat: "hero_close", goal: "Final clean hero shot of the product, premium lighting, brand close." }
+            // { id: 2, beat: "product_in_use", goal: "Same person naturally using the product in their environment." },
+            // { id: 3, beat: "genuine_moment", goal: "Candid reaction moment implying satisfaction/relief/delight (no staged smiling-at-camera)." },
+            // { id: 4, beat: "hero_close", goal: "Final clean hero shot of the product, premium lighting, brand close." }
         ]
     }
 };

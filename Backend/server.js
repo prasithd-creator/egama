@@ -4,9 +4,12 @@ import "dotenv/config";
 import userRouter from "./Router/userRouter.js";
 import { connectCloudinary } from "./Config/Cloudinary.js";
 import path from "path";
-
+import connectDB from "./Config/mongoDB.ts";
+import dns from "node:dns";
+dns.setServers(["1.1.1.1", "8.8.8.8"]);
 const app = express();
 const PORT = process.env.PORT || 5000;
+connectDB();
 connectCloudinary();
 
 app.use(cors());

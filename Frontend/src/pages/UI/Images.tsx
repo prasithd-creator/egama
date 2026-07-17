@@ -5,12 +5,14 @@ import { AppContext } from "../../Context/createContent";
 import axios from "axios";
 import { toast } from "react-toastify";
 import RegenerateIcon from "../../assets/re_generate.svg";
+import OllamaProgress from "./OllamaProgress";
 
 function Images() {
     const location = useLocation();
     const navigate = useNavigate();
     const context = useContext(AppContext);
-    const state = location?.state?.data?.data?.image_prompts as any;
+    const allStates = location?.state as any;
+    const state = location?.state?.data?.image_prompts as any;
     const responseData = state;
     const requirements = location?.state?.requirements as any;
     const [loading, setLoading] = useState<boolean>(false);
@@ -29,14 +31,22 @@ function Images() {
     const timerRef = useRef<any>(null);
     const cancelledRef = useRef(false);
     const [progress, setProgress] = useState(0);
-    const scenes = location?.state?.scenes?.data?.screenplay?.scenes as any;
+    const scenes = location?.state?.scenes?.screenplay?.scenes as any;
+    const [elapsed, setElapsed] = useState(0);
+    const [characters, setCharacters] = useState(0);
+    const [generatedScenes, setGeneratedScenes] = useState(0);
+    const [totalScenes, setTotalScenes] = useState<number | null>(null);
+    const [remaining, setRemaining] = useState<number | null>(null);
+    const [generateScenes, setGenerateScenes] = useState<string>("Generate Video Prompt");
 
-
-
+    console.log(allStates?.details?.title);
+    console.log(scenes)
     //combin the prompt and negative prompt
     const combined = state?.map((item: any) => ({
         combined_prompt: `Prompt: ${item.prompt}, \nNegative Prompt: ${item.negative_prompt}`,
     }));
+
+    console.log(state);
 
 
 
@@ -260,9 +270,14 @@ function Images() {
 
                 if (imageUrl) {
                     results.push(imageUrl);
-
                     setRegenerate(true);
                     setImagegenerate([...results]);
+                    const res = await axios.post(`${backendUrl}/api/uploadImage/db`, { imageUrl, sceneNumber: p.scene_number, topicName: allStates.requirements, companyName: allStates?.details?.title });
+                    if (!res.data.success) {
+                        throw new Error(res.data.message);
+                    }
+
+                    console.log(res.data);
                 }
             }
 
@@ -320,21 +335,77 @@ function Images() {
 
 
     ///Generate the Image to Video Prompt
+    const pollOllamaJob = (
+        jobId: string,
+        onProgress: (data: any) => void
+    ): Promise<any> => {
+        return new Promise((resolve, reject) => {
+            const interval = setInterval(async () => {
+                try {
+                    const progressResponse = await axios.get(
+                        `${backendUrl}/api/ollamaProgress/${jobId}`
+                    );
+                    const progressData = progressResponse.data;
+
+                    onProgress(progressData);
+
+                    if (progressData.status === "completed") {
+                        clearInterval(interval);
+                        resolve(progressData.data);
+                    }
+
+                    if (progressData.status === "failed") {
+                        clearInterval(interval);
+                        reject(new Error(progressData.error || "Generation failed"));
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    reject(error);
+                }
+            }, 1000);
+        });
+    };
+
+
     const generateVideoPrompt = async (data: any) => {
         setGenerateLoading(true);
         setTimer(0);
         timerRef.current = setInterval(() => {
             setTimer((prev: number) => prev + 1);
         }, 1000);
+
+        // Reset progress UI for this stage
+        setProgress(0);
+        setElapsed(0);
+        setCharacters(0);
+        setGeneratedScenes(0);
+        setTotalScenes(data.length);
+
         try {
-            const res = await axios.post(`${backendUrl}/api/ollamaVideoPrompt`, { images: data, requirements, companyDetails, webContent, scenes });
-            console.log(res);
-            if (res.data.success) {
-                console.log(res.data);
-                setVideoPrompt(res.data);
-                const uploaded = await uploadComfy(data);
-                // navigate("/videos", { state: { details: responseData, videoPrompt: res.data, image: data, comfyImage: uploaded } });
-            }
+            const res = await axios.post(`${backendUrl}/api/ollamaVideoPrompt`, {
+                images: data,
+                requirements,
+                companyDetails,
+                webContent,
+                scenes,
+                imagePrompts: state,
+            });
+
+            const jobId = res.data.jobId;
+
+            const videoPromptResult = await pollOllamaJob(jobId, (progressData) => {
+                setProgress(progressData.progress);
+                setRemaining(progressData.remaining);
+                setElapsed(progressData.elapsed);
+                setCharacters(progressData.characters);
+                setGeneratedScenes(progressData.scenes);
+            });
+
+            console.log(videoPromptResult);
+            setVideoPrompt(videoPromptResult);
+
+            const uploaded = await uploadComfy(data);
+            navigate("/videos", { state: { details: responseData, videoPrompt: videoPromptResult, image: data, comfyImage: uploaded } });
         } catch (error) {
             console.log(error);
         } finally {
@@ -344,7 +415,7 @@ function Images() {
             }
             setGenerateLoading(false);
         }
-    }
+    };
 
 
 
@@ -600,6 +671,32 @@ function Images() {
                             <p className="text-white animate-pulse duration-800">{formatTime(timer)}</p>
                             <p className="text-white animate-pulse duration-800">Waiting for the response...</p>
                         </div>
+                    </div>
+                )
+            }
+
+            {/* resopnse Loading */}
+            {
+                generateLoading && (
+                    <div className="fixed z-50 inset-0 bg-black/30 backdrop-blur-sm">
+
+                        <div className="flex flex-col items-center justify-center w-full h-full gap-6">
+
+
+                            <OllamaProgress
+                                loading={generateLoading}
+                                progress={progress}
+                                remaining={remaining}
+                                elapsed={elapsed}
+                                scenes={generatedScenes}
+                                totalScenes={allStates?.scenes?.screenplay?.scene_count}
+                                characters={characters}
+                                text={generateScenes}
+                            />
+
+
+                        </div>
+
                     </div>
                 )
             }

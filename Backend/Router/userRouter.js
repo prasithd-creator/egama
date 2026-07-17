@@ -9,6 +9,8 @@ import ollama from "../Controller/Ollama/Ollama.js";
 import ollamaVideoPrompt from "../Controller/Ollama/OllamaVideoPrompt.js";
 import { mainMerge } from "../Controller/ffmpeg/mainMerge.js";
 import ollamaScences from "../Controller/Ollama/OllamaScens.js";
+import { getProgress } from "../Controller/Ollama/Ollama-progress.js";
+import { uploadImages } from "../Controller/Upload/uploadImageDB.js";
 
 
 const userRouter = express.Router();
@@ -25,6 +27,8 @@ userRouter.post("/mainMerge", upload.fields([
     { name: "video2", maxCount: 1 }
 ]), mainMerge);
 userRouter.post("/ollamaScences", ollamaScences);
+userRouter.get("/ollamaProgress/:id", getProgress);
+userRouter.post("/uploadImage/db", uploadImages);
 
 
 export default userRouter;

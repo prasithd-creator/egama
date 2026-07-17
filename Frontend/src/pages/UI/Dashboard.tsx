@@ -5,6 +5,7 @@ import { AppContext } from "../../Context/createContent";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import TOPIC_SCENE_CONFIG from "../../assets/TopicScene";
+import OllamaProgress from "./OllamaProgress";
 
 export default function ChatGPTUrlScreen() {
     const navigate = useNavigate();
@@ -25,7 +26,16 @@ export default function ChatGPTUrlScreen() {
     const [timer, setTimer] = useState<any>(0);
     const timerRef = useRef<any>(null);
     const [requirement, setRequirement] = useState<string>("");
-
+    const [progress, setProgress] = useState(0);
+    const [remaining, setRemaining] = useState<number | null>(null);
+    const [result, setResult] = useState<any>(null);
+    const [elapsed, setElapsed] = useState(0);
+    const [characters, setCharacters] = useState(0);
+    const [generatedScenes, setGeneratedScenes] = useState(0);
+    const [scenes, setScenes] = useState<any>(null);
+    const [generateScenes, setGenerateScenes] = useState<string>("Generate Scenes");
+    const [stage, setStage] = useState<1 | 2>(1);
+    const [totalScenes, setTotalScenes] = useState<number | null>(null);
 
 
     useEffect(() => {
@@ -78,21 +88,166 @@ export default function ChatGPTUrlScreen() {
     };
 
 
+    const pollOllamaJob = (
+        jobId: string,
+        onProgress: (data: any) => void
+    ): Promise<any> => {
+        return new Promise((resolve, reject) => {
+            const interval = setInterval(async () => {
+                try {
+                    const progressResponse = await axios.get(
+                        `${BackendUrl}/api/ollamaProgress/${jobId}`
+                    );
+                    const progressData = progressResponse.data;
+
+                    onProgress(progressData);
+
+                    if (progressData.status === "completed") {
+                        clearInterval(interval);
+                        resolve(progressData.data);
+                    }
+
+                    if (progressData.status === "failed") {
+                        clearInterval(interval);
+                        reject(new Error(progressData.error || "Generation failed"));
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    reject(error);
+                }
+            }, 1000);
+        });
+    };
+
+
 
     //submit the requirement
+    // const sendResponse = async () => {
+    //     if (!selectedImages || selectedImages.length < 2) return toast.error("Please select 2 images");
+    //     if (!requirement) return toast.error("Please select the requirement");
+    //     //loading
+    //     setRequirementLoading(true);
+    //     setGenerateScenes("Ollama is thinking...");
+    //     //stop the timer
+    //     setTimer(0);
+    //     timerRef.current = setInterval(() => {
+    //         setTimer((prev: number) => prev + 1);
+    //     }, 1000);
+    //     const metadata = responseData?.metadata;
+
+    //     if (!metadata) return;
+
+    //     const updatedMetadata = {
+    //         ...metadata,
+    //         requirements: requirement,
+    //     };
+    //     const updatedResponseData = {
+    //         ...responseData,
+    //         metadata: updatedMetadata,
+    //     };
+
+    //     setResponseData({
+    //         ...responseData,
+    //         metadata: updatedMetadata,
+    //     });
+
+    //     const selectedScene =
+    //         updatedMetadata.requirements as keyof typeof TOPIC_SCENE_CONFIG;
+
+    //     const scene = TOPIC_SCENE_CONFIG[selectedScene];
+    //     setScenes(scene);
+    //     console.log(scene);
+    //     console.log(updatedMetadata);
+    //     console.log(updatedMetadata.description);
+    //     console.log(updatedMetadata.requirements);
+    //     let timer: any;
+    //     try {
+    //         setGenerateScenes("Ollama is Generating the Scenes...");
+    //         const res = await axios.post(
+    //             `${BackendUrl}/api/ollamaScences`, { text: updatedResponseData.metadata, webContent: responseData.makedown, scene, topic: selectedScene }
+    //         )
+
+    //         const jobId = res.data.jobId;
+    //         timer = setInterval(async () => {
+    //             try {
+
+    //                 const progressResponse = await axios.get(
+    //                     `${BackendUrl}/api/ollamaProgress/${jobId}`
+    //                 );
+
+    //                 const progressData = progressResponse.data;
+    //                 console.log(progressData);
+    //                 setProgress(progressData.progress);
+
+    //                 setRemaining(progressData.remaining);
+
+    //                 setElapsed(progressData.elapsed);
+
+    //                 setCharacters(progressData.characters);
+
+    //                 setGeneratedScenes(progressData.scenes);
+
+    //                 if (progressData.status === "completed") {
+    //                     // clearInterval(timer);
+    //                     const scenes = progressData.data;
+    //                     try {
+    //                         setGenerateScenes("Ollama is Generating the Prompt...");
+    //                         const res = await axios.post(
+    //                             `${BackendUrl}/api/ollama`, { text: updatedResponseData.metadata, webContent: responseData.makedown, topic: selectedScene, scenes }
+    //                         )
+    //                         const prompt = res.data;
+    //                         setImgGenerated(true);
+
+    //                         const uploaded = await uploadComfy(selectedImages);
+
+    //                         console.log("Upload completed:", uploaded);
+
+    //                         navigate("/images", { state: { data: prompt, uploaded, requirements: responseData.metadata.requirements, details: responseData.metadata, webContent: responseData.makedown, scenes } });
+    //                         console.log(res.data);
+    //                         setRequirementLoading(false);
+    //                     } catch (error) {
+    //                         console.log(error);
+
+    //                         setRequirementLoading(false);
+    //                         return;
+    //                     }
+    //                 }
+    //                 if (progressData.status === "failed") {
+
+    //                     clearInterval(timer);
+
+    //                     setRequirementLoading(false);
+
+    //                     toast.error(
+    //                         progressData.error || "Generation failed"
+    //                     );
+    //                 }
+    //             } catch (error) {
+    //                 console.log(error);
+    //             }
+    //         }, 1000);
+    //     } catch (error) {
+    //         console.log(error);
+    //         toast.error((error as Error).message);
+    //         setRequirementLoading(false);
+    //     }
+    // };
+
     const sendResponse = async () => {
         if (!selectedImages || selectedImages.length < 2) return toast.error("Please select 2 images");
         if (!requirement) return toast.error("Please select the requirement");
-        //loading
-        setRequirementLoading(true);
 
-        //stop the timer
+        // loading
+        setRequirementLoading(true);
+        setGenerateScenes("Ollama is thinking...");
+
+        // stop the timer
         setTimer(0);
         timerRef.current = setInterval(() => {
             setTimer((prev: number) => prev + 1);
         }, 1000);
-        const metadata = responseData?.metadata;
 
+        const metadata = responseData?.metadata;
         if (!metadata) return;
 
         const updatedMetadata = {
@@ -113,41 +268,80 @@ export default function ChatGPTUrlScreen() {
             updatedMetadata.requirements as keyof typeof TOPIC_SCENE_CONFIG;
 
         const scene = TOPIC_SCENE_CONFIG[selectedScene];
+        setScenes(scene);
 
-        console.log(scene);
-        console.log(updatedMetadata);
-        console.log(updatedMetadata.description);
-        console.log(updatedMetadata.requirements);
         try {
-            const res = await axios.post(
-                `${BackendUrl}/api/ollamaScences`, { text: updatedResponseData.metadata, webContent: responseData.makedown, scene, topic: selectedScene }
-            )
+            // ---- Stage 1: generate the screenplay/scenes ----
+            setStage(1);
+            setTotalScenes(scene.sceneCount ?? 0);
+            setGenerateScenes("Ollama is Generating the Scenes...");
 
-            if (res.data.success) {
-                const data = res.data;
-                try {
-                    const res = await axios.post(
-                        `${BackendUrl}/api/ollama`, { text: updatedResponseData.metadata, webContent: responseData.makedown, topic: selectedScene, scenes: data }
-                    )
-                    const prompt = res.data;
-                    setImgGenerated(true);
-                    const uploaded = await uploadComfy(selectedImages);
-                    console.log("Upload completed:", uploaded);
-                    navigate("/images", { state: { data: prompt, uploaded, requirements: responseData.metadata.requirements, details: responseData.metadata, webContent: responseData.makedown, scenes: data } });
-                    console.log(res.data);
-                } catch (error) {
-                    console.log(error);
-                    return;
-                }
-            }
+            const scenesRes = await axios.post(`${BackendUrl}/api/ollamaScences`, {
+                text: updatedResponseData.metadata,
+                webContent: responseData.makedown,
+                scene,
+                topic: selectedScene,
+            });
+
+            const scenesJobId = scenesRes.data.jobId;
+
+            const screenplay = await pollOllamaJob(scenesJobId, (progressData) => {
+                setProgress(progressData.progress);
+                setRemaining(progressData.remaining);
+                setElapsed(progressData.elapsed);
+                setCharacters(progressData.characters);
+                setGeneratedScenes(progressData.scenes);
+            });
+
+            // ---- Stage 2: generate the image prompts ----
+            // The backend receives the FULL screenplay and internally generates
+            // one image prompt per scene, scene by scene, reporting continuous
+            // progress under a single jobId. It only resolves once every scene's
+            // prompt has been generated.
+            setStage(2);
+            setTotalScenes(screenplay?.screenplay?.scene_count ?? 0);
+            setGenerateScenes("Ollama is Generating the Prompts...");
+            setProgress(0);
+            setElapsed(0);
+            setCharacters(0);
+            setGeneratedScenes(0);
+
+            const promptRes = await axios.post(`${BackendUrl}/api/ollama`, {
+                text: updatedResponseData.metadata,
+                webContent: responseData.makedown,
+                scenes: screenplay,
+            });
+
+            const promptJobId = promptRes.data.jobId;
+
+            const prompt = await pollOllamaJob(promptJobId, (progressData) => {
+                setProgress(progressData.progress);
+                setRemaining(progressData.remaining);
+                setElapsed(progressData.elapsed);
+                setCharacters(progressData.characters);
+                setGeneratedScenes(progressData.scenes);
+            });
+
+            setImgGenerated(true);
+
+            const uploaded = await uploadComfy(selectedImages);
+            console.log("Upload completed:", uploaded);
+
+            navigate("/images", {
+                state: {
+                    data: prompt, // { image_prompts: [...] }
+                    uploaded,
+                    requirements: responseData.metadata.requirements,
+                    details: responseData.metadata,
+                    webContent: responseData.makedown,
+                    scenes: screenplay,
+                },
+            });
+
+            setRequirementLoading(false);
         } catch (error) {
             console.log(error);
             toast.error((error as Error).message);
-        } finally {
-            // Stop timer
-            if (timerRef.current) {
-                clearInterval(timerRef.current);
-            }
             setRequirementLoading(false);
         }
     };
@@ -230,7 +424,9 @@ export default function ChatGPTUrlScreen() {
 
 
     return (
+
         <div className="min-h-screen">
+
 
             {/* Logo */}
             <div className="absolute top-6 left-6 flex items-center gap-3">
@@ -301,7 +497,6 @@ export default function ChatGPTUrlScreen() {
                                 <p className="text-green-400 break-all">
                                     {submittedUrl}
                                 </p>
-
                             </div>
                         )}
 
@@ -431,19 +626,35 @@ export default function ChatGPTUrlScreen() {
                 </div>
 
             </div>
-            
+
             {/* resopnse Loading */}
             {
                 RequirementLoading && (
-                    <div className="absolute z-50 top-0 left-0 w-full h-full bg-black/50 overflow-hidden">
-                        <div className="flex flex-col items-center justify-center mt-6 w-full h-full">
-                            <div className="w-30 h-30 border-4 border-t-transparent rounded-full animate-spin border-white"></div>
-                            <p className="text-white animate-pulse duration-800">{formatTime(timer)}</p>
-                            <p className="text-white animate-pulse duration-800">Waiting for the response...</p>
+                    <div className="fixed z-50 inset-0 bg-black/30 backdrop-blur-sm">
+
+                        <div className="flex flex-col items-center justify-center w-full h-full gap-6">
+
+
+                            <OllamaProgress
+                                loading={RequirementLoading}
+                                progress={progress}
+                                remaining={remaining}
+                                elapsed={elapsed}
+                                scenes={generatedScenes}
+                                totalScenes={scenes?.sceneCount}
+                                characters={characters}
+                                text={generateScenes}
+                                stage={stage}
+                            />
+
+
                         </div>
+
                     </div>
                 )
             }
+
+
         </div>
 
     );

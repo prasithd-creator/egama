@@ -12,7 +12,7 @@ export default defineConfig({
   server: {
     proxy: {
       "/api": {
-        target: "https://urgent-claimed-gone-guru.trycloudflare.com",
+        target: "https://round-era-bishop-allen.trycloudflare.com",
         changeOrigin: true,
         secure: false,
         rewrite: (path) => path.replace(/^\/api/, "")

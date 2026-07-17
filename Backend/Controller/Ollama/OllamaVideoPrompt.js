@@ -1,6 +1,627 @@
 import axios from "axios";
+import progressStore from "../../utils/OllamaProgressStore.js";
+
+const buildPrompt = ({ requirements, companyDetails, webContent, scene, imagePrompt }) => `
+                     You are an LTX-2.3 Cinematic Prompt Engineer.
+
+                        Your task is to transform the supplied website information, scene data, and reference image into ONE production-ready, photorealistic 10-second Image-to-Video prompt following the official LTX-2.3 prompting guide.
+
+                        Internally reason about:
+                        • Story purpose
+                        • Product continuity
+                        • Motion design
+                        • Cinematography
+                        • Lighting
+                        • Audio
+                        • Marketing impact
+
+                        Do NOT output your reasoning.
+
+                        Output ONLY valid JSON.
+
+                        RULES:
+                        - Escape all quotes inside JSON strings.
+                        - Output ONLY valid JSON.
+                        - No markdown.
+                        - No explanations.
+                        - No extra text.
+                        - No newline characters inside string values.
+                        - Every field in the required schema MUST be present.
+                        - Never leave fields empty.
+
+                        INPUT
+
+                        Requirement:
+                        ${requirements}
+
+                        Company:
+                        ${companyDetails.title || "null"}
+
+                        Description:
+                        ${companyDetails.description || "null"}
+
+                        Website:
+                        ${companyDetails.url || "null"}
+
+                        Website Content:
+                        ${webContent || "Not provided"}
+
+                        Scene:
+                        ${JSON.stringify(scene)}
+
+                        Reference Image Prompt:
+                        ${JSON.stringify(imagePrompt || {})}
+
+                        ------------------------------------------------------------
+                        STORY PURPOSE
+                        ------------------------------------------------------------
+
+                        Read the Website Content, Requirement, Company Description and Scene.
+
+                        Silently determine whether this is:
+
+                        • Physical Product
+                        • SaaS / Software / Mobile App
+                        • Service
+
+                        Then determine the purpose of THIS scene only.
+
+                        Examples:
+
+                        Hook
+
+                        Problem
+
+                        Feature
+
+                        Benefit
+
+                        Transformation
+
+                        Proof
+
+                        Trust
+
+                        Hero Close
+
+                        Call To Action
+
+                        Do NOT output your reasoning.
+
+                        The generated video must fully serve ONLY this scene's narrative purpose.
+
+                        Do not introduce ideas from future scenes.
+
+                        ------------------------------------------------------------
+                        IMAGE-TO-VIDEO CONTINUITY
+                        ------------------------------------------------------------
+
+                        The supplied Reference Image already represents the FIRST FRAME of this video.
+
+                        Treat it as locked.
+
+                        Never redesign or restyle it.
+
+                        Maintain identical:
+
+                        • Product geometry
+
+                        • Materials
+
+                        • Colors
+
+                        • Shape
+
+                        • Size
+
+                        • Surface finish
+
+                        • Composition
+
+                        • Character identity
+
+                        • Clothing
+
+                        • Hair
+
+                        • Environment
+
+                        Only describe:
+
+                        • What begins moving
+
+                        • How subjects move
+
+                        • Camera movement
+
+                        • Lighting interaction
+
+                        • Environmental motion
+
+                        • Audio
+
+                        Do NOT re-describe appearance unless motion depends on it.
+
+                        ------------------------------------------------------------
+                        SINGLE CLIP RULE
+                        ------------------------------------------------------------
+
+                        This is ONE continuous 10-second shot.
+
+                        There are:
+
+                        NO cuts
+
+                        NO scene transitions
+
+                        NO edit transitions
+
+                        NO angle changes
+
+                        NO multiple shots
+
+                        NO montage
+
+                        NO time skips
+
+                        The clip should naturally evolve from beginning to end.
+
+                        ------------------------------------------------------------
+                        CAST RULE
+                        ------------------------------------------------------------
+
+                        Only include humans if the story naturally requires one.
+
+                        If humans appear:
+
+                        Describe them naturally through physical characteristics.
+
+                        Examples:
+
+                        medium brown skin
+
+                        dark hair
+
+                        Indian office attire
+
+                        Indian home
+
+                        Indian workplace
+
+                        Never explicitly label ethnicity.
+
+                        ------------------------------------------------------------
+                        PROMPT STRUCTURE
+                        ------------------------------------------------------------
+
+                        The "prompt" field MUST be ONE flowing paragraph.
+
+                        6–8 complete sentences.
+
+                        Present tense only.
+
+                        Describe the entire 10-second clip continuously.
+
+                        Follow this exact order.
+
+                        1.
+
+                        Establish the shot.
+
+                        2.
+
+                        Describe the subject.
+
+                        3.
+
+                        Describe the primary action.
+
+                        4.
+
+                        Describe supporting motion.
+
+                        5.
+
+                        Describe the environment.
+
+                        6.
+
+                        Describe lighting.
+
+                        7.
+
+                        Describe texture.
+
+                        8.
+
+                        Describe camera movement.
+
+                        9.
+
+                        Describe lens.
+
+                        10.
+
+                        Describe synchronized audio.
+
+                        The action should naturally evolve over the entire clip.
+
+                        Every sentence should continue the previous one.
+
+                        Never create disconnected moments.
+
+                        ------------------------------------------------------------
+                        ACTION RULES
+                        ------------------------------------------------------------
+
+                        Use ONE dominant action.
+
+                        Secondary motion may support it.
+
+                        Avoid multiple unrelated actions.
+
+                        Every movement must be physically possible.
+
+                        Never imply actions.
+
+                        Describe every visible movement explicitly.
+
+                        ------------------------------------------------------------
+                        SPATIAL RELATIONSHIPS
+                        ------------------------------------------------------------
+
+                        Clearly describe where objects exist.
+
+                        Examples:
+
+                        The product sits in the foreground.
+
+                        The customer stands behind it.
+
+                        Window light enters from the left.
+
+                        Plants remain softly blurred in the background.
+
+                        The camera remains chest height.
+
+                        ------------------------------------------------------------
+                        LIGHTING
+                        ------------------------------------------------------------
+
+                        Specify exactly ONE primary light source.
+
+                        Specify:
+
+                        Light source
+
+                        Direction
+
+                        Color temperature
+
+                        Intensity
+
+                        Shadow softness
+
+                        Surface interaction
+
+                        Examples:
+
+                        Morning sunlight
+
+                        5600K daylight
+
+                        3200K tungsten
+
+                        Large softbox
+
+                        Window light
+
+                        Practical lamp
+
+                        Never use vague words such as:
+
+                        beautiful
+
+                        cinematic
+
+                        moody
+
+                        epic
+
+                        Instead describe physical lighting.
+
+                        ------------------------------------------------------------
+                        TEXTURE
+                        ------------------------------------------------------------
+
+                        Always include physical detail.
+
+                        Examples:
+
+                        condensation
+
+                        fabric weave
+
+                        skin pores
+
+                        metal brushing
+
+                        glass reflections
+
+                        wood grain
+
+                        dust
+
+                        mist
+
+                        water droplets
+
+                        ------------------------------------------------------------
+                        CAMERA RULES
+                        ------------------------------------------------------------
+
+                        Choose EXACTLY ONE camera movement.
+
+                        Examples:
+
+                        Static tripod
+
+                        Subtle push-in
+
+                        Slow dolly
+
+                        Gentle handheld follow
+
+                        Very slow lateral drift
+
+                        Locked-off shot with slight stabilization movement
+
+                        The movement must remain identical for the entire clip.
+
+                        Never switch movement.
+
+                        Avoid:
+
+                        Orbit
+
+                        Whip pan
+
+                        Fast dolly
+
+                        Drone
+
+                        Crane
+
+                        Rapid zoom
+
+                        Extreme handheld shake
+
+                        ------------------------------------------------------------
+                        LENS
+                        ------------------------------------------------------------
+
+                        Specify:
+
+                        Lens
+
+                        Depth of field
+
+                        Camera reference
+
+                        Examples:
+
+                        35mm
+
+                        50mm
+
+                        85mm
+
+                        f/2.8
+
+                        f/4
+
+                        Sony FX6
+
+                        ARRI Alexa Mini
+
+                        RED V-Raptor
+
+                        Natural film grain.
+
+                        Realistic motion blur.
+
+                        ------------------------------------------------------------
+                        AUDIO
+                        ------------------------------------------------------------
+
+                        Describe synchronized audio inside the prompt.
+
+                        Include:
+
+                        Ambient sounds
+
+                        Object sounds
+
+                        Footsteps
+
+                        Fabric
+
+                        Wind
+
+                        Machinery
+
+                        Room tone
+
+                        Voice
+
+                        Music (if appropriate)
+
+                        Audio must naturally match visible action.
+
+                        ------------------------------------------------------------
+                        NO TEXT RULE
+                        ------------------------------------------------------------
+
+                        Never generate:
+
+                        Readable text
+
+                        Captions
+
+                        Subtitles
+
+                        Logos
+
+                        Watermarks
+
+                        Signs
+
+                        Labels
+
+                        UI text
+
+                        HUD
+
+                        Brand recognition must come only from:
+
+                        Shape
+
+                        Material
+
+                        Color
+
+                        Motion
+
+                        ------------------------------------------------------------
+                        MARKETING GOAL
+                        ------------------------------------------------------------
+
+                        Generate visuals that support the intended marketing purpose.
+
+                        If this is:
+
+                        Hook
+
+                        Generate curiosity.
+
+                        Problem
+
+                        Generate recognition.
+
+                        Feature
+
+                        Generate understanding.
+
+                        Benefit
+
+                        Generate desire.
+
+                        Proof
+
+                        Generate trust.
+
+                        Hero Close
+
+                        Generate premium product recall.
+
+                        CTA
+
+                        Generate conversion intent.
+
+                        Do not output these labels.
+
+                        ------------------------------------------------------------
+                        VOICE OVER
+                        ------------------------------------------------------------
+
+                        Generate one narrator.
+
+                        Populate the voice_profile object completely.
+
+                        Gender
+
+                        Tone
+
+                        Pitch
+
+                        Pacing
+
+                        Accent
+
+                        Then generate ONE voice_over_segment.
+
+                        Approximately 4–6 spoken words per second.
+
+                        Natural narration.
+
+                        No filler.
+
+                        Only include a CTA if this scene itself is the final CTA scene.
+
+                        ------------------------------------------------------------
+                        SCENE IDENTIFIERS
+                        ------------------------------------------------------------
+
+                        DO NOT invent identifiers.
+
+                        scene_number MUST exactly equal:
+
+                        Scene.scene_number
+
+                        beat MUST exactly equal:
+
+                        Scene.beat
+
+                        Never renumber.
+
+                        Never guess.
+
+                        Never modify.
+
+                        ------------------------------------------------------------
+                        STRICT SCHEMA
+                        ------------------------------------------------------------
+
+                        Return EXACTLY this JSON.
+
+                        {
+                        "scene_number": ${scene.scene_number},
+                        "beat":"Copy Scene.beat exactly",
+
+                        "prompt":"One continuous 6–8 sentence LTX-2.3 prompt following every rule above.",
+
+                        "negative_prompt":"morphing, distortion, warping, flicker, jitter, temporal artifacts, duplicate limbs, anatomy errors, inconsistent identity, inconsistent lighting, low quality, CGI, cartoon, plastic skin, text, captions, subtitles, watermark, logo, UI, HUD, scene changes, camera cuts, transitions, montage, split screen, impossible physics, floating objects, sweeping camera movement, whip pan, orbit, drone, crane shot",
+
+                        "voice_profile":{
+                        "gender":"",
+                        "tone":"",
+                        "pitch":"",
+                        "pacing":"",
+                        "accent":""
+                        },
+
+                        "voice_over_segment":"",
+
+                        "style":"premium, cinematic, photoreal, documentary-grade, direct response, single continuous take",
+
+                        "ltx_settings_recommendation":"steps 36, CFG 3.2, 24fps",
+
+                        "creative_rationale":[
+                        "",
+                        "",
+                        ""
+                        ]
+                        }`;
 
 const ollamaVideoPrompt = async (req, res) => {
+    const jobId = Date.now().toString();
+    progressStore.set(jobId, {
+        progress: 0,
+        characters: 0,
+        scenes: 0,
+        remaining: null,
+        status: "running"
+    });
 
     try {
         const {
@@ -9,20 +630,62 @@ const ollamaVideoPrompt = async (req, res) => {
             webContent = "",
             companyDetails = {},
             scenes = [],
+            imagePrompts = [],
         } = req.body;
 
-        console.log(scenes);
-
         if (!Array.isArray(images) || images.length === 0) {
+            progressStore.set(jobId, {
+                progress: 0,
+                status: "failed",
+                error: "Images array is required"
+            });
             return res.status(400).json({
                 success: false,
                 error: "Images array is required",
             });
         }
 
-        const processImage = async (imageUrl, scenes) => {
+        res.json({ jobId });
+
+        console.log(scenes);
+
+        const MAX_RETRIES = 3;
+        const totalImages = images.length;
+        const startTime = Date.now();
+
+        // Estimate expected output size PER video-clip JSON object, so
+        // progress climbs continuously as tokens stream in, not just in a
+        // single jump when each image finishes.
+        const estimatedCharsPerImage = 2000;
+        const estimatedTotalCharacters = totalImages * estimatedCharsPerImage;
+
+        let overallCharacters = 0; // cumulative chars across ALL images so far
+        let completedImages = 0;
+
+        const emitProgress = () => {
+            const elapsed = (Date.now() - startTime) / 1000;
+
+            let progress = (overallCharacters / estimatedTotalCharacters) * 100;
+            progress = Math.min(progress, 99);
+
+            const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
+            const remaining = estimatedTotal - elapsed;
+
+            progressStore.set(jobId, {
+                progress: Number(progress.toFixed(1)),
+                characters: overallCharacters,
+                scenes: completedImages,
+                elapsed: Number(elapsed.toFixed(1)),
+                remaining: remaining > 0 ? Number(remaining.toFixed(1)) : null,
+                status: "running"
+            });
+        };
+
+        const processImage = async (imageUrl, scene, imagePrompt, retry = 0) => {
             try {
                 console.log("Processing:", imageUrl);
+                console.log("Scene:", scene);
+                console.log("Reference image prompt:", imagePrompt);
 
                 // Download image from Cloudinary
                 const imageResponse = await axios.get(imageUrl, {
@@ -36,110 +699,61 @@ const ollamaVideoPrompt = async (req, res) => {
                 const base64 = Buffer.from(imageResponse.data).toString("base64");
                 console.log("Base64 Start:", base64.substring(0, 30));
 
-                const prompt = `
-                                     You are FIVE roles merged into one pass: STORY ARCHITECT, PROMPT ENGINEER (LTX-2.3 specialist), CREATIVE ART DIRECTOR, DP/CAMERAMAN, MARKETING MANAGER. Apply all five lenses internally, then output ONE unified 10-second photoreal video clip concept for the single scene provided below.
+                const prompt = buildPrompt({ requirements, companyDetails, webContent, scene, imagePrompt });
 
-                                        RULES: Escape all quotes inside strings. Output ONLY valid JSON. No markdown, no explanations, no extra text. No newline characters inside string values.
-
-                                        INPUT:
-                                        Requirement: ${requirements}
-                                        Company: ${companyDetails.title || "null"}
-                                        Description: ${companyDetails.description || "null"}
-                                        Website: ${companyDetails.url || "null"}
-                                        Website Content: ${webContent || "Not provided"}
-                                        Scene: ${JSON.stringify(scenes)}
-
-                                        SINGLE-CLIP RULE: This is a standalone 10-second clip, not part of a stitched sequence. It must fully serve its own scene's beat (given in Scene above) and read as a complete, self-contained moment.
-                                        - If the scene's beat is a hook, problem, or value beat, let the clip breathe in that beat only — it does not need to resolve into a CTA.
-                                        - If the scene's beat is a final/hero_close/CTA beat, the clip should visually and narratively resolve on the product/subject.
-                                        - NO readable text, captions, subtitles, or overlays on screen at any point — carry brand identity purely through color, shape, material, and motion.
-
-                                        STORY ARCHITECT (runs first, silently, once): Read Website Content + Requirement + the Scene to classify what is being sold — physical product, SaaS/software/app, or service — and confirm the narrative purpose of this specific beat. Choose the action to fit that classification instead of defaulting to a generic hero-shot:
-                                        Physical product → tactile hero-shot (surface, material, light interacting with the object)
-                                        SaaS/tool/app → workflow-in-action or before/after transformation, shown through human hands/posture/environment, never through screen text or UI
-                                        Service → human-outcome moment (a person experiencing the result of the service)
-                                        Do not output this classification. Let it silently shape what happens in the clip. If a human appears, they follow CAST RULE below.
-
-                                        CAST RULE: Any human shown must be Indian — describe them through physical/regional cues (skin tone, hair, features, attire if relevant to context e.g. casual Indian office wear, everyday Indian home setting) without naming ethnicity as a label. Keep it natural and contextual, not a checklist. If the story doesn't require a human, skip this entirely — do not force a person into the frame.
-
-                                        LTX-2.3 PROMPT RULES (apply to the "prompt" field):
-                                        Single flowing paragraph, present tense, 6-8 sentences covering the full 10s timeline of this clip. Order: Subject → Action → Lighting/Environment → Camera → Lens → Audio. Use physical/behavioral cues, not emotion words (e.g. "shoulders slumped" not "sad"). No readable text, logos, or signage — carry brand via color, shape, material only. One dominant action, smooth physically plausible motion, no chaotic/stacked movement. Honor the scene's given scene_description and camera_composition — translate them into LTX-2.3 form rather than inventing a new visual idea.
-
-                                        ENGINEER: Lock product/subject geometry, material, color, and identity from the input; keep background flexible. Make every action explicit — nothing implied. Translate the Story Architect's chosen beat into a concrete, filmable action.
-
-                                        ART DIRECTOR: Define one concrete light source, color temperature, and texture detail (condensation, fabric weave, skin, dust, glare), consistent with the locked identity and with the beat's tone (e.g. flatter/harsher light for problem beats, premium key light for hero/close beats). No vague mood words ("moody," "sleek") — only physical descriptors.
-
-                                        DP: Choose exactly ONE camera move, kept MINIMAL in distance/speed — a subtle push-in, a slight drift, a gentle settle, or a near-lock-off with barely-perceptible motion. Cinematic quality must come from lens choice, depth of field, framing, and light — not from a big or fast move. No sweeping dolly, no wide orbit, no whip or rapid reframe. There are no cuts and no move-changes within the clip. Name the lens (35/50/85mm), aperture/DOF, and a real-camera anchor (e.g. Sony FX6 documentary feel) for natural grain and motion, not synthetic-smooth CGI motion. If this is the final/hero_close beat, explicitly resolve the move on the product/subject; otherwise end mid-motion.
-
-                                        MARKETING: Define the viewer's feeling and intended action, tied to the conversion goal implied by this scene's narrative purpose. Since no on-screen text is allowed, push brand recall entirely through visual identity — color, material, shape, motion signature — not slogans. Only carry an explicit CTA feeling if this is the final beat.
-
-                                        VOICE OVER: Decide ONE narrator identity (gender, tone, pitch, pacing, accent) for this clip and describe it fully in a "voice_profile" object. Write a single "voice_over_segment" for this scene's beat — a self-contained line if this is the only clip, or a line that reads naturally as part of a larger script if the scene metadata indicates it's one of several. Word count: roughly 4-6 words per second of narration, human narrator pacing, no filler. Only land on an explicit CTA line if this is the final/hero_close beat.
-
-                                        CRITICAL — DO NOT INVENT IDENTIFIERS: The "scene_number" and "beat" fields must be copied EXACTLY from the Scene input above (Scene.scene_number and Scene.beat or equivalent field names present in the input JSON). Do not invent, renumber, reset to 0, increment, or guess these values under any circumstance — read them directly from the Scene input and reproduce them unchanged.
-
-                                        STRICT SCHEMA COMPLIANCE:
-                                        Every field listed in the OUTPUT JSON structure below is REQUIRED and must appear in every response, with no exceptions. Do not omit, skip, or leave blank any field — including negative_prompt, voice_profile (all 5 sub-fields), voice_over_segment, style, ltx_settings_recommendation, and creative_rationale (minimum 3 items). If a field seems repetitive or less important for a given scene, still populate it fully — do not shorten the response by dropping fields. Before finalizing your response, mentally verify all fields are present and non-empty, and that scene_number/beat exactly match the Scene input.
-
-                                        OUTPUT JSON:
-                                        {
-                                        "scene_number": ${scenes.scene_number},
-                                        "beat": "MUST exactly match Scene.beat from the input — do not invent a value",
-                                        "prompt": "single flowing paragraph per LTX-2.3 rules above, 6-8 sentences, this scene's beat only, one minimal continuous camera move, Indian cast if humans present, no resolving/closing shot unless this is the final beat",
-                                        "negative_prompt": "morphing, distortion, warping, flicker, jitter, stutter, shaky camera, temporal artifacts, low quality, text, watermark, logo, cartoon, CGI, plastic skin, fused fingers, inconsistent lighting, jump cuts, scene changes, multiple angles, edit transitions, camera cuts, sweeping camera movement, fast dolly, whip pan, wide orbit, excessive camera motion, end card, closing graphic",
-                                        "voice_profile": {
-                                            "gender": "string",
-                                            "tone": "string",
-                                            "pitch": "string",
-                                            "pacing": "string",
-                                            "accent": "string"
-                                        },
-                                        "voice_over_segment": "self-contained narration for this scene, spoken in voice_profile above, includes CTA line only if this is the final beat",
-                                        "style": "premium, cinematic, photoreal, documentary-grade, direct response, single minimal continuous take",
-                                        "ltx_settings_recommendation": "steps 30-40, CFG 3.0-3.5, 24fps",
-                                        "creative_rationale": ["bullet1", "bullet2", "bullet3"]
-                                        }`
-
-
-
-                // Send the request and model for the Ollama
-                const body = {
-                    model: "qwen2.5vl:3b",
-                    stream: false,
-                    format: "json",
-
-                    options: {
-                        temperature: 0.1,
-                        num_predict: 700
-                    },
-
-                    messages: [
-                        {
-                            role: "user",
-                            content: prompt,
-                            images: [base64]
-                        }
-                    ]
-                };
-
-                console.log("Sending request to Ollama...");
-
-                ///Ollama API
-                const response = await axios.post(
-                    "http://127.0.0.1:11434/api/chat",
-                    body,
-                    {
-                        headers: {
-                            "Content-Type": "application/json",
+                const response = await fetch("http://127.0.0.1:11434/api/chat", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        model: "qwen2.5vl:3b",
+                        stream: true,
+                        format: "json",
+                        options: {
+                            temperature: 0.1,
+                            num_predict: 700
                         },
+                        messages: [
+                            {
+                                role: "user",
+                                content: prompt,
+                                images: [base64]
+                            }
+                        ]
+                    })
+                });
+
+                if (!response.ok) throw new Error("Failed to generate the video prompt");
+
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+
+                let raw = "";
+                let buffer = "";
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop() || "";
+
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
+
+                        try {
+                            const json = JSON.parse(line);
+
+                            if (json.message?.content) {
+                                raw += json.message.content;
+                                overallCharacters += json.message.content.length;
+                                emitProgress();
+                            }
+                        } catch {
+                            // Ignore incomplete JSON line
+                        }
                     }
-                );
-
-                console.dir(response.data, { depth: null });
-
-                const raw = response.data?.message?.content;
-
-                if (!raw) {
-                    throw new Error("No content returned from Ollama");
                 }
 
                 console.log("Raw Model Output:");
@@ -151,35 +765,24 @@ const ollamaVideoPrompt = async (req, res) => {
                     .replace(/\\_/g, "_")
                     .trim();
 
-
-                // Extract only JSON
                 const start = cleanJson.indexOf("{");
                 const end = cleanJson.lastIndexOf("}");
 
                 cleanJson = cleanJson.substring(start, end + 1);
-
-
-                // Fix bad control characters
                 cleanJson = cleanJson.replace(/[\u0000-\u001F]+/g, " ");
 
-                try {
+                // Throws if invalid -> caught below and retried
+                return JSON.parse(cleanJson);
 
-                    const parsed = JSON.parse(cleanJson);
-
-                    return parsed;
-
-                } catch (err) {
-                    console.log("JSON FAILED");
-                    console.error(err);
-                    console.log(cleanJson);
-
-                    return {
-                        success: false,
-                        error: "Invalid JSON",
-                        raw: cleanJson
-                    };
-                }
             } catch (err) {
+                if (retry < MAX_RETRIES) {
+                    console.log(
+                        `Scene ${scene?.scene_number ?? "?"}: attempt ${retry + 1} failed (${err.message}). Retrying ${retry + 1}/${MAX_RETRIES}...`
+                    );
+                    return processImage(imageUrl, scene, imagePrompt, retry + 1);
+                }
+
+                console.log(`Scene ${scene?.scene_number ?? "?"}: failed after ${MAX_RETRIES} retries`);
                 console.error(err.response?.data || err);
 
                 return {
@@ -189,35 +792,48 @@ const ollamaVideoPrompt = async (req, res) => {
             }
         };
 
-        // const results = [];
+        const results = [];
 
-        // for (let i = 0; i < images.length; i++) {
+        for (let i = 0; i < images.length; i++) {
+            results.push(
+                await processImage(images[i], scenes[i], imagePrompts[i])
+            );
 
-        //     const result = await processImage(
-        //         images[i],
-        //         scenes[i]
-        //     );
+            completedImages = i + 1;
+            emitProgress();
 
-        //     results.push(result);
-        // }
+            console.log(`--- Video prompt ${completedImages}/${totalImages} complete ---`);
+        }
 
-        const results = await Promise.all(
-            images.map((image, index) =>
-                processImage(image, scenes[index])
-            )
-        );
-        return res.status(200).json({
-            success: true,
-            total: results.length,
-            data: results,
+        progressStore.set(jobId, {
+            progress: 100,
+            characters: overallCharacters,
+            scenes: totalImages,
+            elapsed: Number(((Date.now() - startTime) / 1000).toFixed(1)),
+            remaining: null,
+            status: "completed",
+            data: {
+                success: true,
+                total: results.length,
+                data: results
+            }
         });
+
     } catch (err) {
         console.error(err);
 
-        return res.status(500).json({
-            success: false,
-            error: err.message,
+        progressStore.set(jobId, {
+            progress: 0,
+            status: "failed",
+            error: err.message
         });
+
+        if (!res.headersSent) {
+            return res.status(500).json({
+                success: false,
+                error: err.message,
+            });
+        }
     }
 };
 
