@@ -1,5 +1,6 @@
 import axios from "axios";
 import progressStore from "../../utils/OllamaProgressStore.js";
+import ImagePrompt from "../../Models/imagePrompt.ts";
 
 const buildPrompt = ({ requirements, companyDetails, webContent, scene, imagePrompt }) => `
                      You are an LTX-2.3 Cinematic Prompt Engineer.
@@ -44,7 +45,7 @@ const buildPrompt = ({ requirements, companyDetails, webContent, scene, imagePro
                         ${companyDetails.url || "null"}
 
                         Website Content:
-                        ${webContent || "Not provided"}
+                        ${"Not provided"}
 
                         Scene:
                         ${JSON.stringify(scene)}
@@ -622,6 +623,7 @@ const ollamaVideoPrompt = async (req, res) => {
         remaining: null,
         status: "running"
     });
+    console.log(req.body);
 
     try {
         const {
@@ -645,7 +647,9 @@ const ollamaVideoPrompt = async (req, res) => {
             });
         }
 
-        res.json({ jobId });
+        res.json({
+            success: true,
+            jobId,});
 
         console.log(scenes);
 
@@ -709,8 +713,9 @@ const ollamaVideoPrompt = async (req, res) => {
                         stream: true,
                         format: "json",
                         options: {
+                            num_ctx: 32768,
                             temperature: 0.1,
-                            num_predict: 700
+                            num_predict: 1200
                         },
                         messages: [
                             {
@@ -722,7 +727,16 @@ const ollamaVideoPrompt = async (req, res) => {
                     })
                 });
 
-                if (!response.ok) throw new Error("Failed to generate the video prompt");
+                if (!response.ok) {
+                    const errorText = await response.text();
+
+                    console.log("Status:", response.status);
+                    console.log("Ollama Error:", errorText);
+
+                    throw new Error(
+                        `Ollama ${response.status}: ${errorText}`
+                    );
+                }
 
                 const reader = response.body.getReader();
                 const decoder = new TextDecoder();
@@ -818,6 +832,34 @@ const ollamaVideoPrompt = async (req, res) => {
                 data: results
             }
         });
+
+        const category = companyDetails.title;
+        const topic = requirements;
+
+        let imagePrompt = await ImagePrompt.findOne({
+            category
+        });
+
+        if (!imagePrompt) {
+            imagePrompt = new ImagePrompt({
+                category,
+                topics: []
+            });
+        }
+
+        let topicsFolder = imagePrompt.topics.find(t => t.name === topic);
+        if (!topicsFolder) {
+            imagePrompt.topics.push({
+                name: topic,
+                video_prompts: results
+            });
+        } else {
+            topicsFolder.video_prompts = results;
+        }
+
+        await imagePrompt.save();
+        console.log("imagePrompts", imagePrompts);
+        console.log("All scene video prompts generated.");
 
     } catch (err) {
         console.error(err);

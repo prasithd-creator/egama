@@ -1,18 +1,31 @@
 import mongoose from "mongoose";
 
+
+const TopicSchema = new mongoose.Schema({
+    name: String,
+
+    scene_prompts: {
+        type: [mongoose.Schema.Types.Mixed],
+        default: []
+    },
+
+    image_prompts: {
+        type: [mongoose.Schema.Types.Mixed],
+        default: []
+    },
+
+    video_prompts: {
+        type: [mongoose.Schema.Types.Mixed],
+        default: []
+    }
+}, {_id: false,  id: false});
+
 const imagePromptSchema = new mongoose.Schema({
     category: {
         type: String,
         required: true
     },
-    topics: [
-        {
-            name: String,
-            scene_prompts: { type: Array, default: [] },
-            image_prompts: { type: Array, default: [] },
-            video_prompts: { type: Array, default: [] }
-        }
-    ]
+    topics: [TopicSchema],
 }, { timestamps: true, minimize: false });
 
 const ImagePrompt = mongoose.models.ImagePrompt || mongoose.model("ImagePrompt", imagePromptSchema);

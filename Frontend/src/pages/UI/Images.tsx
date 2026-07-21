@@ -16,7 +16,7 @@ function Images() {
     const responseData = state;
     const requirements = location?.state?.requirements as any;
     const [loading, setLoading] = useState<boolean>(false);
-    const [imagegenerate, setImagegenerate] = useState<string[] | any>(null);
+    const [imagegenerate, setImagegenerate] = useState<string[] | any>(["https://res.cloudinary.com/dwdllwrim/image/upload/v1783928702/comfyui/hcdhd7j7iuo9tlsrk3k9.png", "https://res.cloudinary.com/dwdllwrim/image/upload/v1783683976/comfyui/urlk3hydhtcoe8gfmdsm.png"]);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const backendUrl = context?.BackendUrl as string;
     const [videoPrompt, setVideoPrompt] = useState<any>(null);
@@ -40,14 +40,29 @@ function Images() {
     const [generateScenes, setGenerateScenes] = useState<string>("Generate Video Prompt");
 
     console.log(allStates?.details?.title);
-    console.log(scenes)
+    console.log(allStates)
     //combin the prompt and negative prompt
     const combined = state?.map((item: any) => ({
         combined_prompt: `Prompt: ${item.prompt}, \nNegative Prompt: ${item.negative_prompt}`,
     }));
-
     console.log(state);
 
+
+    //prevent the user from going back
+    useEffect(() => {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (generateLoading) {
+                e.preventDefault();
+                e.returnValue = ""; // Required for most browsers
+            }
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+
+        return () => {
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+        };
+    }, [generateLoading]);
 
 
     /// final code
@@ -367,6 +382,7 @@ function Images() {
     };
 
 
+    ///Generate the Image to Video Prompt
     const generateVideoPrompt = async (data: any) => {
         setGenerateLoading(true);
         setTimer(0);
@@ -391,6 +407,10 @@ function Images() {
                 imagePrompts: state,
             });
 
+            if (!res.data.success) {
+                throw new Error(res.data.message);
+            }
+
             const jobId = res.data.jobId;
 
             const videoPromptResult = await pollOllamaJob(jobId, (progressData) => {
@@ -400,6 +420,10 @@ function Images() {
                 setCharacters(progressData.characters);
                 setGeneratedScenes(progressData.scenes);
             });
+
+            if (!videoPromptResult) {
+                throw new Error("Video prompt generation failed");
+            }
 
             console.log(videoPromptResult);
             setVideoPrompt(videoPromptResult);
@@ -422,21 +446,60 @@ function Images() {
     ///Upload the image to the cloudinary
     const uploadImage = async () => {
         setUploading(true);
-        console.log(imagegenerate);
+
+        const payLoad = prompts.map((p: any, index: number) => ({
+            sceneNumber: p.scene_number,
+            image: imagegenerate[index]
+        }));
+
         try {
-            const res = await axios.post(`${backendUrl}/api/uploadimage`, { images: imagegenerate });
+            const res = await axios.post(
+                `${backendUrl}/api/uploadimage`,
+                {
+                    images: payLoad
+                }
+            );
+
             console.log(res.data);
+
             if (res.data.success) {
-                setImagegenerate(res.data.urls);
-                generateVideoPrompt(res.data.urls);
+
+                const uploadedImages = res.data.urls;
+
+
+                // keep only urls for image processing
+                setImagegenerate(
+                    uploadedImages.map((item: any) => item.secure_url)
+                );
+
+
+                generateVideoPrompt(
+                    uploadedImages.map((item: any) => item.secure_url)
+                );
+
+
+                for (const item of uploadedImages) {
+
+                    await axios.post(
+                        `${backendUrl}/api/uploadImage/db`,
+                        {
+                            imageUrl: item.secure_url,
+                            sceneNumber: item.sceneNumber,
+                            topicName: allStates.requirements,
+                            companyName: allStates?.details?.title,
+                        }
+                    );
+
+                }
             }
-        }
-        catch (error) {
+
+        } catch (error) {
             console.log(error);
+
         } finally {
             setUploading(false);
         }
-    }
+    };
 
     ///Upload the image to comfy input
     const uploadComfy = async (imageUrls: string[]) => {
@@ -508,7 +571,7 @@ function Images() {
                         loading &&
                         <button className="bg-red-500 hover:bg-red-600 cursor-pointer disabled:opacity-50 text-white px-6 py-3 rounded-2xl font-semibold shadow-lg transition-all flex items-center gap-2" onClick={cancelImageGeneration}>Cancel Generation</button>
                     }
-                    {reGenerate &&
+                    {!reGenerate &&
                         <button
                             onClick={uploadImage}
                             disabled={loading || uploading || generateLoading}

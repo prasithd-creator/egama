@@ -2,9 +2,13 @@ import axios from "axios";
 import fixJson from "./jsonFix.ts";
 import progressStore from "../../utils/OllamaProgressStore.js";
 import ImagePrompt from "../../Models/imagePrompt.ts";
+import runningJobs from "../../utils/jobManager.js";
 
 const ollamaScences = async (req, res) => {
     const jobId = Date.now().toString();
+    const controller = new AbortController();
+    runningJobs.set(jobId, controller);
+
     progressStore.set(jobId, {
         progress: 0,
         characters: 0,
@@ -173,6 +177,7 @@ const ollamaScences = async (req, res) => {
         const generateScreenplay = async (messages, retry = 0) => {
             const response = await fetch("http://127.0.0.1:11434/api/chat", {
                 method: "POST",
+                signal: controller.signal,
                 headers: {
                     "Content-Type": "application/json"
                 },
@@ -220,6 +225,12 @@ const ollamaScences = async (req, res) => {
             });
 
             const progressTimer = setInterval(() => {
+                controller.signal.addEventListener("abort", () => {
+                    console.log("Stopping progress timer");
+
+                    clearInterval(progressTimer);
+                    return;
+                });
                 const elapsed = (Date.now() - startTime) / 1000;
 
                 let progress = (totalCharacters / estimatedTotalCharacters) * 100;
@@ -256,6 +267,17 @@ const ollamaScences = async (req, res) => {
             }, 1000);
 
             while (true) {
+                if (controller.signal.aborted) {
+                    clearInterval(progressTimer);
+
+                    try {
+                        await reader.cancel();
+                    } catch (e) {
+                        console.log("Reader cancel error:", e.message);
+                    }
+
+                    throw new Error("Generation cancelled");
+                }
                 const { value, done } = await reader.read();
                 if (done) break;
 
@@ -366,6 +388,9 @@ const ollamaScences = async (req, res) => {
 
         generateScreenplay(messages)
             .then(async (parsed) => {
+                if (controller.signal.aborted) {
+                    throw new Error("Generation cancelled");
+                }
                 progressStore.set(jobId, {
                     progress: 100,
                     status: "completed",
@@ -374,6 +399,7 @@ const ollamaScences = async (req, res) => {
 
                 const category = text.title;
                 const topic = parsed.screenplay.topic; // testimonials
+                runningJobs.delete(jobId);
 
                 let imagePrompt = await ImagePrompt.findOne({
                     category
@@ -407,16 +433,30 @@ const ollamaScences = async (req, res) => {
                 console.log("Generation finished");
             })
             .catch((err) => {
-                console.error(err);
-                progressStore.set(jobId, {
-                    progress: 0,
-                    status: "failed",
-                    error: err.message
-                });
+
+                if (controller.signal.aborted) {
+                    console.log("Generation cancelled by user");
+
+                    progressStore.set(jobId, {
+                        progress: 0,
+                        status: "cancelled"
+                    });
+
+                } else {
+                    console.error(err);
+
+                    progressStore.set(jobId, {
+                        progress: 0,
+                        status: "failed",
+                        error: err.message
+                    });
+                }
+
+                runningJobs.delete(jobId);
             });
     } catch (err) {
         console.error(err);
-
+        runningJobs.delete(jobId);
         progressStore.set(jobId, {
             progress: 0,
             status: "failed",

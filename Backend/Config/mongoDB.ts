@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import ImagePrompt from "../Models/imagePrompt.ts";
 
 const connectDB = async () => {
     try {
@@ -6,8 +7,8 @@ const connectDB = async () => {
             console.log("Connected to MongoDB");
         });
         console.log(process.env.MONGODB_URL)
-        await mongoose.connect(`${process.env.MONGODB_URL}`, {dbName: "egamaFlow"});
-        console.log(mongoose.connection.name);
+        await mongoose.connect(`${process.env.MONGODB_URL}`, { dbName: "egamaFlow" });
+        await ImagePrompt.syncIndexes();
     } catch (error) {
         console.error("MongoDB connection failed:", error);
         process.exit(1);

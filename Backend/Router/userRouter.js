@@ -10,7 +10,9 @@ import ollamaVideoPrompt from "../Controller/Ollama/OllamaVideoPrompt.js";
 import { mainMerge } from "../Controller/ffmpeg/mainMerge.js";
 import ollamaScences from "../Controller/Ollama/OllamaScens.js";
 import { getProgress } from "../Controller/Ollama/Ollama-progress.js";
-import { uploadImages } from "../Controller/Upload/uploadImageDB.js";
+import { uploadImages } from "../Controller/UploadDB/uploadImageDB.js";
+import { getMongoData } from "../Controller/UploadDB/getMongoData.js";
+import {cancelGeneration} from "../Controller/cancelController.js";
 
 
 const userRouter = express.Router();
@@ -29,6 +31,8 @@ userRouter.post("/mainMerge", upload.fields([
 userRouter.post("/ollamaScences", ollamaScences);
 userRouter.get("/ollamaProgress/:id", getProgress);
 userRouter.post("/uploadImage/db", uploadImages);
+userRouter.get("/getMongoData", getMongoData);
+userRouter.post("/cancelGeneration", cancelGeneration);
 
 
 export default userRouter;

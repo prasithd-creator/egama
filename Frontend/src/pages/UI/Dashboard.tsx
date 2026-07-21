@@ -36,11 +36,123 @@ export default function ChatGPTUrlScreen() {
     const [generateScenes, setGenerateScenes] = useState<string>("Generate Scenes");
     const [stage, setStage] = useState<1 | 2>(1);
     const [totalScenes, setTotalScenes] = useState<number | null>(null);
+    const [scenesJobId, setScenesJobId] = useState<any>("");
 
 
     useEffect(() => {
         localStorage.setItem("responseData", JSON.stringify(responseData));
     }, [responseData]);
+
+    //prevent the user from going back
+    // useEffect(() => {
+    //     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    //         if (!RequirementLoading || !scenesJobId) return;
+    //         console.log(scenesJobId);
+
+    //         // Tell the backend to cancel the job
+    //         navigator.sendBeacon(
+    //             `${BackendUrl}/api/cancelGeneration`,
+    //             JSON.stringify({
+    //                 jobId: scenesJobId
+    //             })
+    //         );
+
+    //         // Show the browser's leave confirmation
+    //         e.preventDefault();
+    //         e.returnValue = "";
+    //     };
+
+    //     window.addEventListener("beforeunload", handleBeforeUnload);
+
+    //     return () => {
+    //         window.removeEventListener("beforeunload", handleBeforeUnload);
+    //     };
+    // }, [RequirementLoading, scenesJobId, BackendUrl]);
+
+    useEffect(() => {
+        const cancelJob = () => {
+            if (!scenesJobId) return;
+
+            console.log("Cancelling job:", scenesJobId);
+
+            navigator.sendBeacon(
+                `${BackendUrl}/api/cancelGeneration`,
+                JSON.stringify({
+                    jobId: scenesJobId
+                })
+            );
+        };
+
+
+        // Browser back button
+        const handlePopState = () => {
+            if (!RequirementLoading || !scenesJobId) return;
+
+            const confirmLeave = window.confirm(
+                "Generation is still running. Do you want to leave and cancel it?"
+            );
+
+            if (confirmLeave) {
+                cancelJob();
+                window.history.back();
+            } else {
+                window.history.pushState(null, "", window.location.href);
+            }
+        };
+
+
+        // Refresh / close tab
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (!RequirementLoading || !scenesJobId) return;
+
+            e.preventDefault();
+            e.returnValue = "";
+        };
+
+
+        const handleUnload = () => {
+            if (!RequirementLoading || !scenesJobId) return;
+
+            cancelJob();
+        };
+
+
+        // create history lock
+        window.history.pushState(null, "", window.location.href);
+
+
+        window.addEventListener("popstate", handlePopState);
+
+        window.addEventListener(
+            "beforeunload",
+            handleBeforeUnload
+        );
+
+        window.addEventListener(
+            "unload",
+            handleUnload
+        );
+
+
+        return () => {
+            window.removeEventListener(
+                "popstate",
+                handlePopState
+            );
+
+            window.removeEventListener(
+                "beforeunload",
+                handleBeforeUnload
+            );
+
+            window.removeEventListener(
+                "unload",
+                handleUnload
+            );
+        };
+
+    }, [RequirementLoading, scenesJobId, BackendUrl]);
+
 
 
     //map the image for the referrences in the markdown
@@ -88,6 +200,8 @@ export default function ChatGPTUrlScreen() {
     };
 
 
+
+    //poll the ollama job
     const pollOllamaJob = (
         jobId: string,
         onProgress: (data: any) => void
@@ -122,117 +236,6 @@ export default function ChatGPTUrlScreen() {
 
 
     //submit the requirement
-    // const sendResponse = async () => {
-    //     if (!selectedImages || selectedImages.length < 2) return toast.error("Please select 2 images");
-    //     if (!requirement) return toast.error("Please select the requirement");
-    //     //loading
-    //     setRequirementLoading(true);
-    //     setGenerateScenes("Ollama is thinking...");
-    //     //stop the timer
-    //     setTimer(0);
-    //     timerRef.current = setInterval(() => {
-    //         setTimer((prev: number) => prev + 1);
-    //     }, 1000);
-    //     const metadata = responseData?.metadata;
-
-    //     if (!metadata) return;
-
-    //     const updatedMetadata = {
-    //         ...metadata,
-    //         requirements: requirement,
-    //     };
-    //     const updatedResponseData = {
-    //         ...responseData,
-    //         metadata: updatedMetadata,
-    //     };
-
-    //     setResponseData({
-    //         ...responseData,
-    //         metadata: updatedMetadata,
-    //     });
-
-    //     const selectedScene =
-    //         updatedMetadata.requirements as keyof typeof TOPIC_SCENE_CONFIG;
-
-    //     const scene = TOPIC_SCENE_CONFIG[selectedScene];
-    //     setScenes(scene);
-    //     console.log(scene);
-    //     console.log(updatedMetadata);
-    //     console.log(updatedMetadata.description);
-    //     console.log(updatedMetadata.requirements);
-    //     let timer: any;
-    //     try {
-    //         setGenerateScenes("Ollama is Generating the Scenes...");
-    //         const res = await axios.post(
-    //             `${BackendUrl}/api/ollamaScences`, { text: updatedResponseData.metadata, webContent: responseData.makedown, scene, topic: selectedScene }
-    //         )
-
-    //         const jobId = res.data.jobId;
-    //         timer = setInterval(async () => {
-    //             try {
-
-    //                 const progressResponse = await axios.get(
-    //                     `${BackendUrl}/api/ollamaProgress/${jobId}`
-    //                 );
-
-    //                 const progressData = progressResponse.data;
-    //                 console.log(progressData);
-    //                 setProgress(progressData.progress);
-
-    //                 setRemaining(progressData.remaining);
-
-    //                 setElapsed(progressData.elapsed);
-
-    //                 setCharacters(progressData.characters);
-
-    //                 setGeneratedScenes(progressData.scenes);
-
-    //                 if (progressData.status === "completed") {
-    //                     // clearInterval(timer);
-    //                     const scenes = progressData.data;
-    //                     try {
-    //                         setGenerateScenes("Ollama is Generating the Prompt...");
-    //                         const res = await axios.post(
-    //                             `${BackendUrl}/api/ollama`, { text: updatedResponseData.metadata, webContent: responseData.makedown, topic: selectedScene, scenes }
-    //                         )
-    //                         const prompt = res.data;
-    //                         setImgGenerated(true);
-
-    //                         const uploaded = await uploadComfy(selectedImages);
-
-    //                         console.log("Upload completed:", uploaded);
-
-    //                         navigate("/images", { state: { data: prompt, uploaded, requirements: responseData.metadata.requirements, details: responseData.metadata, webContent: responseData.makedown, scenes } });
-    //                         console.log(res.data);
-    //                         setRequirementLoading(false);
-    //                     } catch (error) {
-    //                         console.log(error);
-
-    //                         setRequirementLoading(false);
-    //                         return;
-    //                     }
-    //                 }
-    //                 if (progressData.status === "failed") {
-
-    //                     clearInterval(timer);
-
-    //                     setRequirementLoading(false);
-
-    //                     toast.error(
-    //                         progressData.error || "Generation failed"
-    //                     );
-    //                 }
-    //             } catch (error) {
-    //                 console.log(error);
-    //             }
-    //         }, 1000);
-    //     } catch (error) {
-    //         console.log(error);
-    //         toast.error((error as Error).message);
-    //         setRequirementLoading(false);
-    //     }
-    // };
-
     const sendResponse = async () => {
         if (!selectedImages || selectedImages.length < 2) return toast.error("Please select 2 images");
         if (!requirement) return toast.error("Please select the requirement");
@@ -283,9 +286,10 @@ export default function ChatGPTUrlScreen() {
                 topic: selectedScene,
             });
 
-            const scenesJobId = scenesRes.data.jobId;
+            const JobId = scenesRes.data.jobId;
+            setScenesJobId(JobId);
 
-            const screenplay = await pollOllamaJob(scenesJobId, (progressData) => {
+            const screenplay = await pollOllamaJob(JobId, (progressData) => {
                 setProgress(progressData.progress);
                 setRemaining(progressData.remaining);
                 setElapsed(progressData.elapsed);
@@ -333,7 +337,7 @@ export default function ChatGPTUrlScreen() {
                     uploaded,
                     requirements: responseData.metadata.requirements,
                     details: responseData.metadata,
-                    webContent: responseData.makedown,
+                    webContent: responseData.markdown,
                     scenes: screenplay,
                 },
             });
@@ -445,7 +449,9 @@ export default function ChatGPTUrlScreen() {
                         Workflow Dashboard
                     </p>
                 </div>
+
             </div>
+            <button onClick={() => navigate("/previousflow")} className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition duration-300 right-4 top-4  absolute cursor-pointer">Previous Flow</button>
 
             {/* Main */}
             <div className="flex items-center justify-center min-h-screen px-4">
