@@ -1,4 +1,5 @@
 import { useState, useEffect, useContext, useRef } from "react";
+import { Link } from "lucide-react";
 import logo from "../../assets/egama_logo.png"
 import axios from "axios";
 import { AppContext } from "../../Context/createContent";
@@ -6,6 +7,7 @@ import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import TOPIC_SCENE_CONFIG from "../../assets/TopicScene";
 import OllamaProgress from "./OllamaProgress";
+
 
 export default function ChatGPTUrlScreen() {
     const navigate = useNavigate();
@@ -15,7 +17,6 @@ export default function ChatGPTUrlScreen() {
     const stored = localStorage.getItem("responseData");
     const parsed = stored ? JSON.parse(stored) : null;
     const [responseData, setResponseData] = useState(Array.isArray(parsed) ? parsed.length > 0 ? parsed : null : parsed && Object.keys(parsed).length > 0 ? parsed : null);
-    const [content, setContent] = useState("");
     const context = useContext(AppContext);
     const [imgGenerated, setImgGenerated] = useState<boolean>(false);
     const [RequirementLoading, setRequirementLoading] = useState<boolean>(false);
@@ -37,37 +38,19 @@ export default function ChatGPTUrlScreen() {
     const [stage, setStage] = useState<1 | 2>(1);
     const [totalScenes, setTotalScenes] = useState<number | null>(null);
     const [scenesJobId, setScenesJobId] = useState<any>("");
+    const [analyzeLoading, setAnalyzeLoading] = useState<boolean>(false);
+    const { voiceModel, setVoiceModel } = context as any;
+
+
 
 
     useEffect(() => {
         localStorage.setItem("responseData", JSON.stringify(responseData));
     }, [responseData]);
 
-    //prevent the user from going back
-    // useEffect(() => {
-    //     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-    //         if (!RequirementLoading || !scenesJobId) return;
-    //         console.log(scenesJobId);
-
-    //         // Tell the backend to cancel the job
-    //         navigator.sendBeacon(
-    //             `${BackendUrl}/api/cancelGeneration`,
-    //             JSON.stringify({
-    //                 jobId: scenesJobId
-    //             })
-    //         );
-
-    //         // Show the browser's leave confirmation
-    //         e.preventDefault();
-    //         e.returnValue = "";
-    //     };
-
-    //     window.addEventListener("beforeunload", handleBeforeUnload);
-
-    //     return () => {
-    //         window.removeEventListener("beforeunload", handleBeforeUnload);
-    //     };
-    // }, [RequirementLoading, scenesJobId, BackendUrl]);
+    useEffect(() => {
+        console.log("Voice Model:", voiceModel);
+    }, [voiceModel]);
 
     useEffect(() => {
         const cancelJob = () => {
@@ -155,23 +138,109 @@ export default function ChatGPTUrlScreen() {
 
 
 
-    //map the image for the referrences in the markdown
     useEffect(() => {
         if (!responseData?.markdown) return;
 
         const imageRegex = /!\[.*?\]\((https?:\/\/.*?)\)/g;
 
+        const SKIP_HINTS = ["icon", "ico", "icons", "logo", "flags", "logos", "favicon", "sprite", "button", "btn", "arrow", "chevron", "menu", "hamburger", "close", "search", "filter", "sort", "background", "bg", "banner", "hero-bg", "pattern", "texture", "gradient", "overlay", "mask", "placeholder", "dummy", "default", "fallback", "blank", "loading", "loader", "spinner", "skeleton", "facebook", "instagram", "twitter", "x-logo", "linkedin", "youtube", "tiktok", "pinterest", "snapchat", "whatsapp", "telegram", "discord", "visa", "mastercard", "paypal", "amex", "americanexpress", "applepay", "googlepay", "gpay", "paytm", "upi", "payment", "star", "stars", "rating", "review", "reviews", "offer", "offers", "sale", "discount", "coupon", "promo", "promotion", "deal", "divider", "shape", "illustration", "vector", "graphic", "emoji", "sticker", "avatar", "profile", "user", "team", "brand", "brands", "thumbnail", "thumb", "cover", "header", "warranty", "footer", "nav", "navbar", "template_en", "breadcrumb", "bullet", "dot", "pixel", "tracking", "analytics", "cxservices", "awards"];
+
         const productImages = [...responseData.markdown.matchAll(imageRegex)]
-            .map((match) => match[1])
-            .slice(0, 15);
+            .map(match => match[1])
+            .filter(url => {
+                const lower = url.toLowerCase();
+
+                // Skip common non-product image formats
+                if (lower.endsWith(".svg")) return false;
+
+                // Skip common UI/branding assets
+                if (SKIP_HINTS.some(hint => lower.includes(hint))) return false;
+
+                return true;
+            })
 
         setReferenceImg(productImages);
     }, [responseData?.markdown]);
 
+    // useEffect(() => {
+    //     if (!responseData?.markdown) return;
+
+    //     let cancelled = false;
+
+    //     const analyzeProductImages = async () => {
+    //         setAnalyzeLoading(true);
+    //         setTimer(0);
+    //         timerRef.current = setInterval(() => {
+    //             setTimer((prev: number) => prev + 1);
+    //         }, 1000);
+
+    //         // Reset progress UI for this stage
+    //         setProgress(0);
+    //         setElapsed(0);
+    //         setCharacters(0);
+    //         setGeneratedScenes(0);
+    //         setTotalScenes(0); // unknown until the backend extracts image URLs from the markdown
+
+    //         try {
+    //             const res = await axios.post(`${BackendUrl}/api/ollamaImageAnalysis`, {
+    //                 markdown: responseData.markdown,
+    //             });
+
+    //             if (!res.data.success) {
+    //                 throw new Error(res.data.message);
+    //             }
+
+    //             const jobId = res.data.jobId;
+    //             console.log(jobId);
+
+    //             const analysisResult = await pollOllamaJob(jobId, (progressData) => {
+    //                 if (cancelled) return;
+    //                 setProgress(progressData.progress);
+    //                 setRemaining(progressData.remaining);
+    //                 setElapsed(progressData.elapsed);
+    //                 setCharacters(progressData.characters);
+    //                 setGeneratedScenes(progressData.scenes);
+    //                 setTotalScenes(progressData.scenes);
+    //             });
+
+    //             if (cancelled) return;
+
+    //             if (!analysisResult) {
+    //                 throw new Error("Image analysis failed");
+    //             }
+
+    //             console.log(analysisResult);
+    //             // analysisResult shape: { jobId, productName, results: [{ imageUrl, product_detected, confidence, status, issues, summary }] }
+    //             // setImageAnalysisResults(analysisResult);
+    //         } catch (error) {
+    //             if (cancelled) return;
+    //             console.log(error);
+    //             toast.error((error as Error).message);
+    //         } finally {
+    //             if (timerRef.current) {
+    //                 clearInterval(timerRef.current);
+    //             }
+    //             if (!cancelled) {
+    //                 setAnalyzeLoading(false);
+    //             }
+    //         }
+    //     };
+
+    //     analyzeProductImages();
+
+    //     return () => {
+    //         cancelled = true;
+    //         if (timerRef.current) {
+    //             clearInterval(timerRef.current);
+    //         }
+    //     };
+    // }, [responseData?.markdown]);
+
+
 
     //submit the URL
     const handleSubmit = async () => {
-        if (!url.trim()) return toast.error("Please paste a URL");
+        if (!url.trim()) return toast.warning("Please paste a URL");
 
         try {
             setLoading(true);
@@ -239,6 +308,7 @@ export default function ChatGPTUrlScreen() {
     const sendResponse = async () => {
         if (!selectedImages || selectedImages.length < 2) return toast.error("Please select 2 images");
         if (!requirement) return toast.error("Please select the requirement");
+        if (!voiceModel) return toast.warning("Please select a voice model");
 
         // loading
         setRequirementLoading(true);
@@ -476,17 +546,23 @@ export default function ChatGPTUrlScreen() {
 
                         {/* URL Input */}
                         <div className="flex flex-col md:flex-row gap-4">
+                            <div className="bg-[#111827] border border-gray-600 rounded-2xl text-white placeholder-gray-500 outline-none focus-within:border-green-500 focus-within:ring-2 focus-within:ring-green-500/30 transition-all flex w-full items-center px-4 gap-3">
+                                <Link className="text-gray-300" size={24} />
 
-                            <input
-                                type="url"
-                                placeholder="Paste your workflow URL..."
-                                value={url}
-                                onChange={(e) => setUrl(e.target.value)}
-                                className="flex-1 bg-[#111827]  border border-gray-600   rounded-2xl  px-5 py-4 text-white placeholder-gray-500 outline-none focus:border-green-500 focus:ring-2 focus:ring-green-500/30 transition-all
-                        "
-                            />
+                                <input
+                                    type="url"
+                                    placeholder="Paste your workflow URL..."
+                                    value={url}
+                                    onChange={(e) => setUrl(e.target.value)}
+                                    className="flex-1 bg-transparent text-white placeholder-gray-500 focus:outline-none py-3"
+                                />
+                            </div>
 
-                            <button onClick={handleSubmit} disabled={loading} className="bg-green-500 hover:bg-green-600 text-white cursor-pointer px-8 py-4 rounded-2xl font-semibold transition-all disabled:opacity-50 shadow-lg hover:shadow-green-500/30">
+                            <button
+                                onClick={handleSubmit}
+                                disabled={loading}
+                                className="bg-[image:var(--gradient-primary)] hover:opacity-90 w-full md:w-auto text-white cursor-pointer px-8 py-4 rounded-2xl font-semibold transition-all disabled:opacity-50 shadow-lg hover:shadow-green-500/30 whitespace-nowrap"
+                            >
                                 {loading ? "Sending..." : "Submit URL"}
                             </button>
 
@@ -523,7 +599,7 @@ export default function ChatGPTUrlScreen() {
                         {!loading && responseData &&
                             ((Array.isArray(responseData) && responseData.length > 0) || (!Array.isArray(responseData) && Object.keys(responseData).length > 0)
                             ) && (
-                                <div className="mt-8 space-y-6">
+                                <div className="mt-4 space-y-6">
 
                                     {/* Content Input */}
 
@@ -588,14 +664,6 @@ export default function ChatGPTUrlScreen() {
                                     </div>
                                     <div className="flex flex-col md:flex-row gap-4">
 
-                                        {/* <input
-                                            type="text"
-                                            placeholder="Describe user requirement..."
-                                            value={content}
-                                            onChange={(e) => setContent(e.target.value)}
-                                            className="flex-1 bg-[#111827] border border-gray-600 rounded-2xl px-5 py-4 text-white placeholder-gray-500 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 transition-all"
-                                        /> */}
-
                                         <select
                                             value={requirement}
                                             onChange={(e) => setRequirement(e.target.value)}
@@ -624,6 +692,31 @@ export default function ChatGPTUrlScreen() {
 
                                     </div>
 
+                                    <div className="flex gap-6 mt-4">
+                                        <h1 className="text-gray-400 font-semibold">Audio Voice Response</h1>
+                                        <label className="flex items-center gap-2 cursor-pointer text-gray-200 font-medium">
+                                            <input
+                                                type="radio"
+                                                name="answer"
+                                                value="Brandon"
+                                                className="w-5 h-5 accent-blue-400 cursor-pointer bg-gray-800 border-gray-600"
+                                                onClick={() => setVoiceModel("Brandon")}
+                                            />
+                                            <span>Male</span>
+                                        </label>
+
+                                        <label className="flex items-center gap-2 cursor-pointer text-gray-200 font-medium">
+                                            <input
+                                                type="radio"
+                                                name="answer"
+                                                value="kenddey"
+                                                className="w-5 h-5 accent-blue-400 cursor-pointer bg-gray-800 border-gray-600"
+                                                onClick={() => setVoiceModel("kenddey")}
+                                            />
+                                            <span>Female</span>
+                                        </label>
+                                    </div>
+
                                 </div>
                             )}
 
@@ -635,14 +728,14 @@ export default function ChatGPTUrlScreen() {
 
             {/* resopnse Loading */}
             {
-                RequirementLoading && (
+                (RequirementLoading || analyzeLoading) && (
                     <div className="fixed z-50 inset-0 bg-black/30 backdrop-blur-sm">
 
                         <div className="flex flex-col items-center justify-center w-full h-full gap-6">
 
 
                             <OllamaProgress
-                                loading={RequirementLoading}
+                                loading={RequirementLoading || analyzeLoading}
                                 progress={progress}
                                 remaining={remaining}
                                 elapsed={elapsed}

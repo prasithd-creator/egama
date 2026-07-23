@@ -1,8 +1,9 @@
-import React, { createContext } from "react";
+import React, { createContext, useState } from "react";
 
 interface AppContextType {
   BackendUrl: string;
-  a: number;
+  voiceModel: string;
+  setVoiceModel: (value: string) => void;
 }
 
 export const AppContext = createContext<AppContextType | null>(null);
@@ -15,13 +16,14 @@ export const AppContextProvider = ({
   children,
 }: AppContextProviderProps) => {
   const BackendUrl = import.meta.env.VITE_BACKENDURL as string;
-  const a = 100;
+  const [voiceModel, setVoiceModel] = useState<string>("brandon");
 
   console.log("BackendUrl:", BackendUrl);
 
   const contextValue: AppContextType = {
     BackendUrl,
-    a,
+    voiceModel,
+     setVoiceModel,
   };
 
   return (

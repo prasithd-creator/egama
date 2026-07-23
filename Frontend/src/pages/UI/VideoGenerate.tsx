@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 import axios from "axios";
 import { useContext } from "react";
 import { AppContext } from "../../Context/createContent";
+import useLMNT from "../../API/LMNT";
 
 function VideoGenerate() {
     const location = useLocation();
@@ -23,6 +24,7 @@ function VideoGenerate() {
     const [mergedVideo, setMergedVideo] = useState<string>("");
     const cancelledRef = useRef(false);
     const [progress, setProgress] = useState(0);
+    const { voiceModel } = context as any;
 
     console.log(state);
     console.log(videoPrompt);
@@ -185,11 +187,50 @@ function VideoGenerate() {
 
     };
 
+    console.log(voiceModel);
+
+    const { getAudio } = useLMNT();
+
+    const handleAudio = async () => {
+        if (!voiceModel) {
+            return toast.error("Please select a voice model");
+        }
+
+        try {
+            const segments = videoPrompt
+                ?.map((item: any) => item.voice_over_segment)
+                .filter(Boolean);
+
+            for (const [index, segment] of segments.entries()) {
+                console.log(`Generating audio ${index + 1}`);
+
+                await getAudio(segment, voiceModel);
+
+                console.log(`Saved audio ${index + 1}`);
+            }
+
+            toast.success("All audio files generated successfully!");
+
+        } catch (error) {
+            console.error(error);
+            toast.error("Audio generation failed");
+        }
+    };
+
+    // const voiceOvers = videoPrompt.map((item: any) => item.voice_over_segment);
+
+    console.log(videoPrompt?.[0]?.voice_over_segment);
+
+    useEffect(() => {
+        handleAudio();
+        console.log(voiceModel);
+    }, []);
+
+
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-6">
             <button onClick={mergeVideos} className="px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition cursor-pointer">Merge</button>
-
 
             <div className="flex items-center justify-between mb-10">
                 <button
@@ -219,6 +260,13 @@ function VideoGenerate() {
                             : "Generate Video"}
                 </button>
             </div>
+
+            <button
+                onClick={handleAudio}
+                className="px-6 py-2 bg-gray-800 rounded-full"
+            >
+                Audio
+            </button>
 
             {/* ProgressBar */}
             {loading && (

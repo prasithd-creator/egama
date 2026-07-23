@@ -633,6 +633,7 @@ const ollamaVideoPrompt = async (req, res) => {
             companyDetails = {},
             scenes = [],
             imagePrompts = [],
+            sceneDetails = [],
         } = req.body;
 
         if (!Array.isArray(images) || images.length === 0) {
@@ -649,7 +650,8 @@ const ollamaVideoPrompt = async (req, res) => {
 
         res.json({
             success: true,
-            jobId,});
+            jobId,
+        });
 
         console.log(scenes);
 
@@ -833,8 +835,9 @@ const ollamaVideoPrompt = async (req, res) => {
             }
         });
 
-        const category = companyDetails.title;
-        const topic = requirements;
+        const category = sceneDetails.company_name;
+        const brand = sceneDetails.brand_name;
+        const topic = sceneDetails.topic;
 
         let imagePrompt = await ImagePrompt.findOne({
             category
@@ -843,13 +846,22 @@ const ollamaVideoPrompt = async (req, res) => {
         if (!imagePrompt) {
             imagePrompt = new ImagePrompt({
                 category,
-                topics: []
+                brands: []
             });
         }
 
-        let topicsFolder = imagePrompt.topics.find(t => t.name === topic);
+        let brandFolder = imagePrompt.brands.find(b => b.name === brand);
+        if (!brandFolder) {
+            brandFolder = {
+                name: brand,
+                topics: []
+            };
+            imagePrompt.brands.push(brandFolder);
+        }
+
+        let topicsFolder = brandFolder.topics.find(t => t.name === topic);
         if (!topicsFolder) {
-            imagePrompt.topics.push({
+            brandFolder.topics.push({
                 name: topic,
                 video_prompts: results
             });
@@ -857,8 +869,9 @@ const ollamaVideoPrompt = async (req, res) => {
             topicsFolder.video_prompts = results;
         }
 
+        imagePrompt.markModified("brands");
         await imagePrompt.save();
-        console.log("imagePrompts", imagePrompts);
+        console.log("imagePrompts", imagePrompt);
         console.log("All scene video prompts generated.");
 
     } catch (err) {

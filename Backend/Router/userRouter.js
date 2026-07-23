@@ -13,6 +13,8 @@ import { getProgress } from "../Controller/Ollama/Ollama-progress.js";
 import { uploadImages } from "../Controller/UploadDB/uploadImageDB.js";
 import { getMongoData } from "../Controller/UploadDB/getMongoData.js";
 import {cancelGeneration} from "../Controller/cancelController.js";
+import ollamaImageAnalysis from "../Controller/Ollama/OllamaImageAnalysis.js";
+import textToSpeech from "../Controller/LMNT/textToSpeech.js";
 
 
 const userRouter = express.Router();
@@ -33,6 +35,8 @@ userRouter.get("/ollamaProgress/:id", getProgress);
 userRouter.post("/uploadImage/db", uploadImages);
 userRouter.get("/getMongoData", getMongoData);
 userRouter.post("/cancelGeneration", cancelGeneration);
+userRouter.post("/ollamaImageAnalysis", ollamaImageAnalysis);
+userRouter.post("/textToSpeech", textToSpeech);
 
 
 export default userRouter;

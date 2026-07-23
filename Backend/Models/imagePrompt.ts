@@ -2,7 +2,10 @@ import mongoose from "mongoose";
 
 
 const TopicSchema = new mongoose.Schema({
-    name: String,
+    name: {
+        type: String,
+        required: true
+    },
 
     scene_prompts: {
         type: [mongoose.Schema.Types.Mixed],
@@ -18,14 +21,29 @@ const TopicSchema = new mongoose.Schema({
         type: [mongoose.Schema.Types.Mixed],
         default: []
     }
-}, {_id: false,  id: false});
+}, { _id: false, id: false });
+
+const BrandSchema = new mongoose.Schema(
+    {
+        name: {
+            type: String,
+            required: true
+        },
+
+        topics: {
+            type: [TopicSchema],
+            default: []
+        }
+    },
+    { _id: false, id: false }
+);
 
 const imagePromptSchema = new mongoose.Schema({
     category: {
         type: String,
         required: true
     },
-    topics: [TopicSchema],
+    brands: [BrandSchema],
 }, { timestamps: true, minimize: false });
 
 const ImagePrompt = mongoose.models.ImagePrompt || mongoose.model("ImagePrompt", imagePromptSchema);

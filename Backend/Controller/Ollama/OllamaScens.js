@@ -115,6 +115,17 @@ const ollamaScences = async (req, res) => {
                             HARD CONSTRAINTS FOR EVERY SCENE: no text overlays, no captions, no logos, no readable signage, no watermarks, no CGI/cartoon look, no distorted or warped geometry, no inconsistent lighting between the product and its environment.
 
                             Output format (exactly this shape, ${scene.sceneCount} entries in "scenes", in beat order):
+
+                            Analyze the provided company information before creating the screenplay.
+
+                                Input:
+                                - Requirement: ${text.requirements}
+                                - Company: ${text.title}
+                                - Description: ${text.description}
+                                - Website: ${text.url}
+                                - Website Content: ${webContent}
+
+                                Extract the following information:
                            OUTPUT JSON FORMAT:
 
                                   IMPORTANT:
@@ -130,6 +141,8 @@ const ollamaScences = async (req, res) => {
                                         "topic": "${topic}",
                                         "scene_count": ${scene.sceneCount},
                                         "total_duration_seconds": ${scene.sceneCount * 10},
+                                        "company_name": "Official company name",
+                                        "brand_name": "Primary brand name",
                                         "scenes": [
                                         {
                                             "scene_number": 1,
@@ -397,28 +410,52 @@ const ollamaScences = async (req, res) => {
                     data: parsed
                 });
 
-                const category = text.title;
+                const category = parsed.screenplay.company_name;
+                const brand = parsed.screenplay.brand_name;
                 const topic = parsed.screenplay.topic; // testimonials
                 runningJobs.delete(jobId);
+
+                console.log("Saving to MongoDB...");
+                console.log("Category: ", category);
+                console.log("Brand: ", brand);
+                console.log("Topic: ", topic);
 
                 let imagePrompt = await ImagePrompt.findOne({
                     category
                 });
 
+                console.log(imagePrompt);
+
                 if (!imagePrompt) {
                     imagePrompt = new ImagePrompt({
                         category,
-                        topics: []
+                        brands: []
                     });
                 }
 
+                console.log(imagePrompt);
+
+                // Check brand folder
+                let brandFolder = imagePrompt.brands.find(
+                    (item) => item.name === brand
+                );
+
+                if (!brandFolder) {
+                    brandFolder = {
+                        name: brand,
+                        topics: []
+                    };
+
+                    imagePrompt.brands.push(brandFolder);
+                }
+
                 // Check topic folder
-                let topicFolder = imagePrompt.topics.find(
+                let topicFolder = brandFolder.topics.find(
                     (item) => item.name === topic
                 );
 
                 if (!topicFolder) {
-                    imagePrompt.topics.push({
+                    brandFolder.topics.push({
                         name: topic,
                         scene_prompts: [parsed]
                     });

@@ -2,7 +2,7 @@ import { useLocation, useNavigate } from "react-router"
 import { useState, useContext, useEffect, useRef } from "react";
 import workflow from "../../Comfy_Api/imageAPI-Img";
 import { AppContext } from "../../Context/createContent";
-import axios from "axios";
+import axios, { all } from "axios";
 import { toast } from "react-toastify";
 import RegenerateIcon from "../../assets/re_generate.svg";
 import OllamaProgress from "./OllamaProgress";
@@ -404,6 +404,7 @@ function Images() {
                 companyDetails,
                 webContent,
                 scenes,
+                sceneDetails: allStates?.scenes?.screenplay,
                 imagePrompts: state,
             });
 
@@ -486,7 +487,8 @@ function Images() {
                             imageUrl: item.secure_url,
                             sceneNumber: item.sceneNumber,
                             topicName: allStates.requirements,
-                            companyName: allStates?.details?.title,
+                            companyName: allStates?.scenes?.screenplay?.company_name,
+                            brandName: allStates?.scenes?.screenplay?.brand_name
                         }
                     );
 

@@ -394,8 +394,10 @@ const ollama = async (req, res) => {
             data: { image_prompts: cleanImagePrompts }
         });
 
-        const category = text.title;
+        const category = scenes.screenplay.company_name;
+        const brand = scenes.screenplay.brand_name;
         const topic = scenes.screenplay.topic;
+
         let imagePrompt = await ImagePrompt.findOne({
             category
         });
@@ -403,14 +405,28 @@ const ollama = async (req, res) => {
         if (!imagePrompt) {
             imagePrompt = new ImagePrompt({
                 category,
-                topics: []
+                brands: []
             });
         }
 
-        let topicsFolder = imagePrompt.topics.find(t => t.name === topic);
+        // Check brand folder
+        let brandFolder = imagePrompt.brands.find(
+            (item) => item.name === brand
+        );
+
+        if (!brandFolder) {
+            brandFolder = {
+                name: brand,
+                topics: []
+            };
+
+            imagePrompt.brands.push(brandFolder);
+        }
+
+        let topicsFolder = brandFolder.topics.find(t => t.name === topic);
 
         if (!topicsFolder) {
-            imagePrompt.topics.push({
+            brandFolder.topics.push({
                 name: topic,
                 image_prompts: cleanImagePrompts
             });
