@@ -16,7 +16,7 @@ export const AppContextProvider = ({
   children,
 }: AppContextProviderProps) => {
   const BackendUrl = import.meta.env.VITE_BACKENDURL as string;
-  const [voiceModel, setVoiceModel] = useState<string>("brandon");
+  const [voiceModel, setVoiceModel] = useState<string>("kennedy");
 
   console.log("BackendUrl:", BackendUrl);
 

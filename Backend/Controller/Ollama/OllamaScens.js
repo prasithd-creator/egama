@@ -356,8 +356,7 @@ const ollamaScences = async (req, res) => {
 
                     return generateScreenplay(messages, retry + 1);
                 }
-
-
+                
                 throw new Error(
                     "Ollama returned empty response after retries"
                 );
@@ -463,6 +462,7 @@ const ollamaScences = async (req, res) => {
                     topicFolder.scene_prompts = [parsed];
                 }
 
+                imagePrompt.markModified("brands");
                 await imagePrompt.save();
 
                 console.log("Saved successfully");

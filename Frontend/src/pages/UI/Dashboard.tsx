@@ -42,8 +42,6 @@ export default function ChatGPTUrlScreen() {
     const { voiceModel, setVoiceModel } = context as any;
 
 
-
-
     useEffect(() => {
         localStorage.setItem("responseData", JSON.stringify(responseData));
     }, [responseData]);
@@ -698,7 +696,7 @@ export default function ChatGPTUrlScreen() {
                                             <input
                                                 type="radio"
                                                 name="answer"
-                                                value="Brandon"
+                                                value="brandon"
                                                 className="w-5 h-5 accent-blue-400 cursor-pointer bg-gray-800 border-gray-600"
                                                 onClick={() => setVoiceModel("Brandon")}
                                             />
@@ -709,7 +707,7 @@ export default function ChatGPTUrlScreen() {
                                             <input
                                                 type="radio"
                                                 name="answer"
-                                                value="kenddey"
+                                                value="kennedy"
                                                 className="w-5 h-5 accent-blue-400 cursor-pointer bg-gray-800 border-gray-600"
                                                 onClick={() => setVoiceModel("kenddey")}
                                             />

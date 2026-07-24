@@ -27,21 +27,26 @@ const textToSpeech = async (req, res) => {
             responseType: "arraybuffer"
         });
 
-        const voiceDir = path.join(process.cwd(), "voice");
+        // const voiceDir = path.join(process.cwd(), "voice");
 
-        if (!fs.existsSync(voiceDir)) {
-            fs.mkdirSync(voiceDir, { recursive: true });
-        }
+        // if (!fs.existsSync(voiceDir)) {
+        //     fs.mkdirSync(voiceDir, { recursive: true });
+        // }
 
-        const fileName = `voice-${Date.now()}.mp3`;
-        const filePath = path.join(voiceDir, fileName);
-        fs.writeFileSync(filePath, response.data);
-        console.log("Speech saved!");
-        res.json({
-            success: true,
-            fileName,
-            filePath,
-        });
+        // const fileName = `voice-${Date.now()}.mp3`;
+        // const filePath = path.join(voiceDir, fileName);
+        // fs.writeFileSync(filePath, response.data);
+        // console.log("Speech saved!");
+        // res.json({
+        //     success: true,
+        //     fileName,
+        //     filePath,
+        // });
+
+        res.setHeader("Content-Type", "audio/mpeg");
+        res.setHeader("Content-Length", response.data.length);
+
+        return res.send(response.data);
 
     } catch (err) {
         console.log(err);

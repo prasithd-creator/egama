@@ -2,6 +2,7 @@ import axios from "axios";
 import fixJson from "./jsonFix.ts";
 import progressStore from "../../utils/OllamaProgressStore.js";
 import ImagePrompt from "../../Models/imagePrompt.ts";
+import runningJobs from "../../utils/jobManager.js";
 
 const buildMessages = ({ text, webContent, scene }) => ([
     {
@@ -121,6 +122,13 @@ const buildMessages = ({ text, webContent, scene }) => ([
 
 const ollama = async (req, res) => {
     const jobId = Date.now().toString();
+    const controller = new AbortController();
+    runningJobs.set(jobId, controller);
+
+    console.log("CREATE JOB", jobId);
+    console.log("Controller:", controller);
+    console.log("Map size:", runningJobs.size);
+
     progressStore.set(jobId, {
         progress: 0,
         characters: 0,
@@ -137,8 +145,6 @@ const ollama = async (req, res) => {
 
         const { text, webContent, scenes } = req.body;
 
-        // `scenes` is the FULL parsed screenplay object from ollamaScences.js:
-        // { screenplay: { topic, scene_count, total_duration_seconds, scenes: [...] } }
         const sceneList = scenes?.screenplay?.scenes ?? [];
         const totalScenes = scenes?.screenplay?.scene_count ?? sceneList.length;
 
@@ -151,14 +157,25 @@ const ollama = async (req, res) => {
         const estimatedTotalCharacters = totalScenes * estimatedCharsPerScene;
 
         const overallStartTime = Date.now();
-        let overallCharacters = 0; // cumulative chars across ALL scenes so far
+        let overallCharacters = 0; // cumulative chars across ALL scenes so far — used only for display
 
-        // Generates the image prompt for ONE scene, retrying up to
+        // Generates the image prompt for ONE scene, retrying up to MAX_RETRIES
         const generateOneScenePrompt = async (scene, retry = 0) => {
+            if (controller.signal.aborted) {
+                throw new Error("Generation cancelled");
+            }
+
             const messages = buildMessages({ text, webContent, scene });
+
+            // FIX: per-scene counter, reset fresh on every attempt (including retries).
+            // This is what drives the within-scene progress fraction — it must NOT
+            // carry over characters from previous scenes, or the fraction saturates
+            // instantly on every scene after the first and the bar appears frozen.
+            let sceneCharacters = 0;
 
             const response = await fetch("http://127.0.0.1:11434/api/chat", {
                 method: "POST",
+                signal: controller.signal,
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     model: "llama3.1:8b",
@@ -172,7 +189,6 @@ const ollama = async (req, res) => {
                 })
             });
 
-
             if (!response.ok) throw new Error("Failed to generate the image Prompt");
 
             const reader = response.body.getReader();
@@ -181,10 +197,24 @@ const ollama = async (req, res) => {
             let raw = "";
             let buffer = "";
 
-            while (true) {
-                const { value, done } = await reader.read();
-                if (done) break;
 
+            // stream the response
+            while (true) {
+                // check if the request was cancelled
+                console.log("aborted =", controller.signal.aborted);
+
+                if (controller.signal.aborted) {
+                    console.log("STOPPED");
+
+                    await reader.cancel().catch(() => { });
+
+                    throw new Error("Generation cancelled");
+                }
+
+                // read the next chunk
+                const { value, done } = await reader.read();
+
+                if (done) break;
                 buffer += decoder.decode(value, { stream: true });
 
                 const lines = buffer.split("\n");
@@ -198,17 +228,18 @@ const ollama = async (req, res) => {
 
                         if (json.message?.content) {
                             raw += json.message.content;
-                            overallCharacters += json.message.content.length;
+                            sceneCharacters += json.message.content.length;   // per-scene, resets each attempt
+                            overallCharacters += json.message.content.length; // running total, for display only
 
                             const elapsed = (Date.now() - overallStartTime) / 1000;
                             const completedScenes = scene.scene_number - 1;
 
                             const sceneWeight = 100 / totalScenes;
 
-                            // progress inside current scene
+                            // progress inside current scene — driven by sceneCharacters, not overallCharacters
                             const currentSceneProgress =
                                 Math.min(
-                                    overallCharacters / estimatedCharsPerScene,
+                                    sceneCharacters / estimatedCharsPerScene,
                                     0.99
                                 ) * sceneWeight;
 
@@ -224,7 +255,7 @@ const ollama = async (req, res) => {
                             progressStore.set(jobId, {
                                 progress: Number(progress.toFixed(1)),
                                 characters: overallCharacters,
-                                scenes: completedScenes, // completed scenes so far
+                                scenes: completedScenes,
                                 elapsed: Number(elapsed.toFixed(1)),
                                 remaining: remaining > 0 ? Number(remaining.toFixed(1)) : null,
                                 status: "running"
@@ -304,12 +335,10 @@ const ollama = async (req, res) => {
 
             let result = parsed?.image_prompts ?? parsed;
 
-            // If array, take first object
             if (Array.isArray(result)) {
                 result = result[0];
             }
 
-            // Validate content
             if (
                 !result ||
                 Object.keys(result).length === 0 ||
@@ -360,6 +389,12 @@ const ollama = async (req, res) => {
         const imagePrompts = [];
 
         for (let i = 0; i < sceneList.length; i++) {
+
+            // cancel the generation
+            if (controller.signal.aborted) {
+                throw new Error("Generation cancelled");
+            }
+
             const scene = sceneList[i];
 
             console.log(`\n--- Generating prompt for scene ${scene.scene_number} (${i + 1}/${totalScenes}) ---\n`);
@@ -381,7 +416,6 @@ const ollama = async (req, res) => {
             console.log(`--- Scene ${scene.scene_number} complete (${i + 1}/${totalScenes}) ---`);
         }
 
-        // remove nested arrays
         const cleanImagePrompts = imagePrompts.flat();
 
         progressStore.set(jobId, {
@@ -409,7 +443,6 @@ const ollama = async (req, res) => {
             });
         }
 
-        // Check brand folder
         let brandFolder = imagePrompt.brands.find(
             (item) => item.name === brand
         );
@@ -452,6 +485,8 @@ const ollama = async (req, res) => {
                 error: err.message
             });
         }
+    } finally {
+        runningJobs.delete(jobId);
     }
 };
 

@@ -15,16 +15,71 @@ function VideoGenerate() {
     const backendUrl = context?.BackendUrl as string;
     const [loading, setLoading] = useState<boolean>(false);
     const [reGenerate, setRegenerate] = useState<boolean>(false);
-    const [videoPrompt, setVideoPrompt] = useState<any>(null);
+    const [videoPrompt, setVideoPrompt] = useState<any>([
+        {
+            "scene_number": 1,
+            "beat": "after - reveal",
+            "prompt": "A sun-drenched coastal highway sets the stage for a dynamic shot of the 2026 Ford Mustang® accelerating through sweeping curves. Cinematic camera movement emphasizes speed, power, and premium craftsmanship.",
+            "negative_prompt": "morphing, distortion, warping, flicker, jitter, temporal artifacts, duplicate vehicles, blurry, low quality",
+
+            "voice_profile": {
+                "gender": "neutral",
+                "tone": "professional",
+                "pitch": "moderate",
+                "pacing": "slow and deliberate",
+                "accent": ""
+            },
+
+            "voice_over_segment": "Experience the thrill of driving a 2026 Ford Mustang®. Unleash your inner speedster on this coastal highway.",
+
+            "style": "premium, cinematic, photoreal, documentary-grade, direct response",
+
+            "ltx_settings_recommendation": "steps 36, CFG 3.2, 24fps",
+
+            "creative_rationale": [
+                "The scene establishes the confidence and performance of the 2026 Ford Mustang.",
+                "The camera movement follows the car's aggressive stance and handling.",
+                "The lighting highlights the premium exterior finish."
+            ]
+        },
+        {
+            "scene_number": 2,
+            "beat": "feature showcase",
+            "prompt": "A close-up cinematic sequence transitions from the exterior into the luxurious cockpit. The digital dashboard illuminates while ambient lighting enhances the premium cabin materials.",
+
+            "negative_prompt": "blurry dashboard, distorted interior, flicker, duplicate steering wheel, artifacts, low quality",
+
+            "voice_profile": {
+                "gender": "neutral",
+                "tone": "professional",
+                "pitch": "moderate",
+                "pacing": "slow and deliberate",
+                "accent": ""
+            },
+
+            "voice_over_segment": "Step inside a driver-focused cockpit featuring cutting-edge technology, premium comfort, and intuitive controls designed for every journey.",
+
+            "style": "premium, cinematic, photoreal, documentary-grade, luxury automotive",
+
+            "ltx_settings_recommendation": "steps 36, CFG 3.2, 24fps",
+
+            "creative_rationale": [
+                "The interior showcases modern technology and premium materials.",
+                "Camera movement guides the viewer naturally through the cabin.",
+                "Lighting emphasizes luxury and comfort."
+            ]
+        }
+    ]);
     const [imagePrompt, setImagePrompt] = useState<any>(null);
     const [imagegenerate, setImagegenerate] = useState<any>(null);
-    const [videoGenerate, setVideoGenerate] = useState<any>([]);
+    const [videoGenerate, setVideoGenerate] = useState<any>(["https://res.cloudinary.com/dwdllwrim/video/upload/v1784874944/Voice_check_1_lxzb89.mp4", "https://res.cloudinary.com/dwdllwrim/video/upload/v1784874944/Voice_check_2_mfzn0j.mp4"]);
     const [selectedVideo, setSelectedVideo] = useState<string | null>("");
     const [viewMode, setViewMode] = useState<"generated" | "merged">("generated");
     const [mergedVideo, setMergedVideo] = useState<string>("");
     const cancelledRef = useRef(false);
     const [progress, setProgress] = useState(0);
     const { voiceModel } = context as any;
+    const [audioList, setAudioList] = useState<any>([]);
 
     console.log(state);
     console.log(videoPrompt);
@@ -162,34 +217,19 @@ function VideoGenerate() {
         }
     };
 
+    const { getAudio } = useLMNT();
 
     //video merger
-    const mergeVideos = async () => {
-        console.log(videoGenerate);
-
-        try {
-            const res = await axios.post(
-                `${backendUrl}/api/mainMerge`,
-                {
-                    videos: videoGenerate
-                }
-            );
-
-            if (res.data.success) {
-                setMergedVideo(res.data.output);
-                setViewMode("merged");
-            }
-
-            console.log(res.data);
-        } catch (error) {
-            console.log(error);
-        }
-
-    };
-
-    console.log(voiceModel);
-
-    const { getAudio } = useLMNT();
+    const blobToBase64 = (blob: Blob): Promise<string> =>
+        new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                const result = reader.result as string;
+                resolve(result.split(",")[1]); // strip the data: prefix
+            };
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
 
     const handleAudio = async () => {
         if (!voiceModel) {
@@ -201,30 +241,44 @@ function VideoGenerate() {
                 ?.map((item: any) => item.voice_over_segment)
                 .filter(Boolean);
 
+            const results = [];
+
             for (const [index, segment] of segments.entries()) {
-                console.log(`Generating audio ${index + 1}`);
+                const audioBlob = await getAudio(segment, voiceModel);
+                const url = URL.createObjectURL(audioBlob); // keep for local preview only
+                const base64 = await blobToBase64(audioBlob); // this is what goes to the backend
 
-                await getAudio(segment, voiceModel);
-
-                console.log(`Saved audio ${index + 1}`);
+                results.push({
+                    id: index + 1,
+                    text: segment,
+                    url,       // for playback in the UI
+                    base64,    // for sending to mainMerge
+                });
             }
 
+            setAudioList(results as any);
             toast.success("All audio files generated successfully!");
-
         } catch (error) {
             console.error(error);
             toast.error("Audio generation failed");
         }
     };
 
-    // const voiceOvers = videoPrompt.map((item: any) => item.voice_over_segment);
+    const mergeVideos = async () => {
+        try {
+            const res = await axios.post(`${backendUrl}/api/mainMerge`, {
+                video: videoGenerate,
+                audio: audioList.map((a: any) => ({ base64: a.base64 })), // send base64, not blob url
+            });
 
-    console.log(videoPrompt?.[0]?.voice_over_segment);
-
-    useEffect(() => {
-        handleAudio();
-        console.log(voiceModel);
-    }, []);
+            if (res.data.success) {
+                setMergedVideo(res.data.output);
+                setViewMode("merged");
+            }
+        } catch (error) {
+            console.log(error);
+        }
+    };
 
 
 
@@ -394,6 +448,25 @@ function VideoGenerate() {
                         {viewMode === "merged" && (
                             <video src={mergedVideo} controls autoPlay className="w-full h-64 object-cover" />
                         )}
+
+                        <div className="space-y-4">
+                            {audioList.map((audio: any) => (
+                                <div
+                                    key={audio.id}
+                                    className="border rounded-lg p-4 bg-gray-100"
+                                >
+                                    <p className="font-semibold">
+                                        Scene {audio.id}
+                                    </p>
+
+                                    <p className="text-sm text-gray-600 mb-2">
+                                        {audio.text}
+                                    </p>
+
+                                    <audio controls src={audio.url} className="w-full" />
+                                </div>
+                            ))}
+                        </div>
 
                     </div>
                 </div>

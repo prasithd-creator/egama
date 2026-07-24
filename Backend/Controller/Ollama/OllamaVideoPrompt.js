@@ -530,34 +530,154 @@ const buildPrompt = ({ requirements, companyDetails, webContent, scene, imagePro
                         Generate conversion intent.
 
                         Do not output these labels.
+                        ------------------------------------------------------------
+                        VOICE OVER
+                        ------------------------------------------------------------
+
+                        Generate EXACTLY ONE narrator and EXACTLY ONE original voice-over for this single scene.
+
+                        Before writing the narration, analyze internally:
+
+                        • Scene purpose
+                        • Scene beat
+                        • Product or service type
+                        • Reference image
+                        • Visible action
+                        • Emotional tone
+                        • Marketing objective
+
+                        The narration MUST support ONLY this scene.
+                        Never reference previous or future scenes.
+
+                        ------------------------------------------------------------
+                        VOICE PROFILE
+                        ------------------------------------------------------------
+
+                        Populate the voice_profile object completely.
+
+                        Gender:
+                        Choose the most natural voice for the audience, brand, and scene.
+
+                        Tone:
+                        Select the most appropriate delivery style for this scene only.
+
+                        Pitch:
+                        Choose naturally.
+
+                        Pacing:
+                        Choose a pacing that fits the narration naturally.
+
+                        Accent:
+                        Choose the most appropriate accent for the intended audience.
 
                         ------------------------------------------------------------
                         VOICE OVER
                         ------------------------------------------------------------
 
-                        Generate one narrator.
+                        Generate EXACTLY ONE voice_over_segment.
 
-                        Populate the voice_profile object completely.
+                        DURATION
 
-                        Gender
+                        • Target duration: approximately 6 seconds.
+                        • Preferred length: 12–18 words for a natural commercial delivery.
+                        • Absolute minimum: 12 words.
+                        • Absolute maximum: 14 words ONLY if the requested pacing explicitly allows it.
+                        • Never sound rushed or unnatural.
 
-                        Tone
+                        ------------------------------------------------------------
+                        CONTENT RULES
+                        ------------------------------------------------------------
 
-                        Pitch
+                        The narration MUST:
 
-                        Pacing
+                        • Match only this scene.
+                        • Reflect the emotion and marketing objective.
+                        • Support the visible action without describing obvious visuals.
+                        • Deliver one clear idea.
+                        • Sound like a professionally written commercial.
+                        • Feel natural when spoken by a human narrator.
+                        • Be optimized for premium TTS.
 
-                        Accent
+                        The narration MUST NOT:
 
-                        Then generate ONE voice_over_segment.
+                        • Mention previous scenes.
+                        • Mention future scenes.
+                        • Repeat the company name unless absolutely necessary.
+                        • Include filler words.
+                        • Explain what the audience can already see.
+                        • Include a CTA unless this is the final scene.
 
-                        Approximately 4–6 spoken words per second.
+                        ------------------------------------------------------------
+                        UNIQUENESS (CRITICAL)
+                        ------------------------------------------------------------
 
-                        Natural narration.
+                        Every generated narration MUST be completely original.
 
-                        No filler.
+                        Treat every scene as if it is written by a different professional copywriter.
 
-                        Only include a CTA if this scene itself is the final CTA scene.
+                        NEVER reuse:
+
+                        • Opening phrases
+                        • Closing phrases
+                        • Sentence structures
+                        • Word order
+                        • Marketing slogans
+                        • Verb patterns
+                        • Adjective combinations
+                        • Emotional cadence
+                        • Rhythm
+                        • Transitional phrases
+                        • Brand clichés
+
+                        Avoid repetitive openings such as:
+
+                        • Discover...
+                        • Experience...
+                        • Imagine...
+                        • Meet...
+                        • Introducing...
+                        • Welcome to...
+                        • Step into...
+                        • Unlock...
+                        • Revolutionize...
+                        • Next generation...
+                        • Cutting-edge...
+                        • Best-in-class...
+                        • The future of...
+                        • Built for...
+                        • Designed for...
+                        • Elevate...
+                        • Transform...
+                        • Redefine...
+                        • Say hello to...
+                        • It's time to...
+
+                        Do not simply replace a few words from a previous narration.
+                        Rewrite the entire sentence from a completely different perspective.
+
+                        Every narration should have a unique:
+
+                        • Opening
+                        • Flow
+                        • Grammar
+                        • Vocabulary
+                        • Sentence length
+                        • Emotional style
+                        • Narrative perspective
+
+                        The output must have high lexical diversity and low structural similarity to any previously generated voice-over.
+
+                        If a newly generated narration resembles a previous one in wording, rhythm, or sentence structure, discard it and generate a completely different narration.
+
+                        ------------------------------------------------------------
+                        FINAL REQUIREMENT
+                        ------------------------------------------------------------
+
+                        The final voice-over must sound like an original commercial script written exclusively for this single scene.
+
+                        No two scenes should ever sound like they were written by the same copywriter.
+
+                        The narration must be fresh, memorable, conversational, emotionally appropriate, and structurally unique.
 
                         ------------------------------------------------------------
                         SCENE IDENTIFIERS
@@ -601,7 +721,7 @@ const buildPrompt = ({ requirements, companyDetails, webContent, scene, imagePro
                         "accent":""
                         },
 
-                        "voice_over_segment":"",
+                        "voice_over_segment":"Must only 6-sec narration for this scene. must be understood in voice_profile above.",
 
                         "style":"premium, cinematic, photoreal, documentary-grade, direct response, single continuous take",
 
@@ -667,12 +787,22 @@ const ollamaVideoPrompt = async (req, res) => {
 
         let overallCharacters = 0; // cumulative chars across ALL images so far
         let completedImages = 0;
+        let currentImageCharacters = 0; // chars streamed for the scene currently in flight
+
+        const sliceSize = 100 / totalImages; // e.g. 2 scenes -> 50, 4 scenes -> 25
 
         const emitProgress = () => {
             const elapsed = (Date.now() - startTime) / 1000;
 
-            let progress = (overallCharacters / estimatedTotalCharacters) * 100;
-            progress = Math.min(progress, 99);
+            // % already locked in from fully completed scenes
+            const baseProgress = completedImages * sliceSize;
+
+            // % earned so far *within* the current scene, capped so it can
+            // never reach the next scene's boundary before that scene actually finishes
+            const subProgressRatio = Math.min(currentImageCharacters / estimatedCharsPerImage, 0.98);
+            const inProgress = subProgressRatio * sliceSize;
+
+            let progress = Math.min(baseProgress + inProgress, 100);
 
             const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
             const remaining = estimatedTotal - elapsed;
@@ -692,6 +822,8 @@ const ollamaVideoPrompt = async (req, res) => {
                 console.log("Processing:", imageUrl);
                 console.log("Scene:", scene);
                 console.log("Reference image prompt:", imagePrompt);
+
+                currentImageCharacters = 0;
 
                 // Download image from Cloudinary
                 const imageResponse = await axios.get(imageUrl, {
@@ -764,6 +896,7 @@ const ollamaVideoPrompt = async (req, res) => {
                             if (json.message?.content) {
                                 raw += json.message.content;
                                 overallCharacters += json.message.content.length;
+                                currentImageCharacters += json.message.content.length;
                                 emitProgress();
                             }
                         } catch {
@@ -816,6 +949,7 @@ const ollamaVideoPrompt = async (req, res) => {
             );
 
             completedImages = i + 1;
+            currentImageCharacters = 0;
             emitProgress();
 
             console.log(`--- Video prompt ${completedImages}/${totalImages} complete ---`);
