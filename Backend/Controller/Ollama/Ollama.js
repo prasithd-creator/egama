@@ -125,9 +125,20 @@ const ollama = async (req, res) => {
     const controller = new AbortController();
     runningJobs.set(jobId, controller);
 
+    // Track any in-flight reader so an abort event can cancel it immediately,
+    // instead of waiting for the next poll of controller.signal.aborted.
+    // This is what actually closes the socket to Ollama and stops generation.
+    let activeReader = null;
+
+    const onAbort = () => {
+        console.log(`Job ${jobId}: abort signal received — cancelling active reader`);
+        if (activeReader) {
+            activeReader.cancel().catch(() => { });
+        }
+    };
+    controller.signal.addEventListener("abort", onAbort);
+
     console.log("CREATE JOB", jobId);
-    console.log("Controller:", controller);
-    console.log("Map size:", runningJobs.size);
 
     progressStore.set(jobId, {
         progress: 0,
@@ -154,7 +165,6 @@ const ollama = async (req, res) => {
 
         const MAX_RETRIES = 3;
         const estimatedCharsPerScene = 2000;
-        const estimatedTotalCharacters = totalScenes * estimatedCharsPerScene;
 
         const overallStartTime = Date.now();
         let overallCharacters = 0; // cumulative chars across ALL scenes so far — used only for display
@@ -162,7 +172,7 @@ const ollama = async (req, res) => {
         // Generates the image prompt for ONE scene, retrying up to MAX_RETRIES
         const generateOneScenePrompt = async (scene, retry = 0) => {
             if (controller.signal.aborted) {
-                throw new Error("Generation cancelled");
+                throw new DOMException("Generation cancelled", "AbortError");
             }
 
             const messages = buildMessages({ text, webContent, scene });
@@ -192,83 +202,86 @@ const ollama = async (req, res) => {
             if (!response.ok) throw new Error("Failed to generate the image Prompt");
 
             const reader = response.body.getReader();
+            activeReader = reader;
             const decoder = new TextDecoder();
 
             let raw = "";
             let buffer = "";
 
+            try {
+                // stream the response
+                while (true) {
+                    if (controller.signal.aborted) {
+                        console.log(`Job ${jobId}: aborted — cancelling reader and stopping stream`);
+                        await reader.cancel().catch(() => { });
+                        throw new DOMException("Generation cancelled", "AbortError");
+                    }
 
-            // stream the response
-            while (true) {
-                // check if the request was cancelled
-                console.log("aborted =", controller.signal.aborted);
+                    // read the next chunk
+                    const { value, done } = await reader.read();
 
-                if (controller.signal.aborted) {
-                    console.log("STOPPED");
+                    if (done) break;
+                    buffer += decoder.decode(value, { stream: true });
 
-                    await reader.cancel().catch(() => { });
+                    const lines = buffer.split("\n");
+                    buffer = lines.pop() || "";
 
-                    throw new Error("Generation cancelled");
-                }
+                    for (const line of lines) {
+                        if (!line.trim()) continue;
 
-                // read the next chunk
-                const { value, done } = await reader.read();
+                        try {
+                            const json = JSON.parse(line);
 
-                if (done) break;
-                buffer += decoder.decode(value, { stream: true });
+                            if (json.message?.content) {
+                                raw += json.message.content;
+                                sceneCharacters += json.message.content.length;   // per-scene, resets each attempt
+                                overallCharacters += json.message.content.length; // running total, for display only
 
-                const lines = buffer.split("\n");
-                buffer = lines.pop() || "";
+                                const elapsed = (Date.now() - overallStartTime) / 1000;
+                                const completedScenes = scene.scene_number - 1;
 
-                for (const line of lines) {
-                    if (!line.trim()) continue;
+                                const sceneWeight = 100 / totalScenes;
 
-                    try {
-                        const json = JSON.parse(line);
+                                // progress inside current scene — driven by sceneCharacters, not overallCharacters
+                                const currentSceneProgress =
+                                    Math.min(
+                                        sceneCharacters / estimatedCharsPerScene,
+                                        0.99
+                                    ) * sceneWeight;
 
-                        if (json.message?.content) {
-                            raw += json.message.content;
-                            sceneCharacters += json.message.content.length;   // per-scene, resets each attempt
-                            overallCharacters += json.message.content.length; // running total, for display only
+                                let progress =
+                                    (completedScenes * sceneWeight) +
+                                    currentSceneProgress;
 
-                            const elapsed = (Date.now() - overallStartTime) / 1000;
-                            const completedScenes = scene.scene_number - 1;
+                                progress = Math.min(progress, 99.9);
 
-                            const sceneWeight = 100 / totalScenes;
+                                const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
+                                const remaining = estimatedTotal - elapsed;
 
-                            // progress inside current scene — driven by sceneCharacters, not overallCharacters
-                            const currentSceneProgress =
-                                Math.min(
-                                    sceneCharacters / estimatedCharsPerScene,
-                                    0.99
-                                ) * sceneWeight;
-
-                            let progress =
-                                (completedScenes * sceneWeight) +
-                                currentSceneProgress;
-
-                            progress = Math.min(progress, 99.9);
-
-                            const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
-                            const remaining = estimatedTotal - elapsed;
-
-                            progressStore.set(jobId, {
-                                progress: Number(progress.toFixed(1)),
-                                characters: overallCharacters,
-                                scenes: completedScenes,
-                                elapsed: Number(elapsed.toFixed(1)),
-                                remaining: remaining > 0 ? Number(remaining.toFixed(1)) : null,
-                                status: "running"
-                            });
+                                progressStore.set(jobId, {
+                                    progress: Number(progress.toFixed(1)),
+                                    characters: overallCharacters,
+                                    scenes: completedScenes,
+                                    elapsed: Number(elapsed.toFixed(1)),
+                                    remaining: remaining > 0 ? Number(remaining.toFixed(1)) : null,
+                                    status: "running"
+                                });
+                            }
+                        } catch {
+                            // Ignore incomplete JSON line
                         }
-                    } catch {
-                        // Ignore incomplete JSON line
                     }
                 }
+            } finally {
+                activeReader = null;
             }
 
             // No response received from Ollama
             if (!raw || raw.trim().length === 0) {
+                if (controller.signal.aborted) {
+                    throw new DOMException("Generation cancelled", "AbortError");
+                }
+
                 if (retry < MAX_RETRIES) {
                     console.log(
                         `Scene ${scene.scene_number}: Empty response from Ollama. Retrying ${retry + 1}/${MAX_RETRIES}...`
@@ -291,7 +304,41 @@ const ollama = async (req, res) => {
             const end = cleanJson.lastIndexOf("}");
 
             if (start === -1 || end === -1) {
-                throw new Error("No JSON object found");
+                if (controller.signal.aborted) {
+                    throw new DOMException("Generation cancelled", "AbortError");
+                }
+
+                console.log(`Scene ${scene.scene_number}: NO JSON OBJECT FOUND. Raw output was:`);
+                console.log(cleanJson);
+
+                if (retry < MAX_RETRIES) {
+                    console.log(
+                        `Scene ${scene.scene_number}: No JSON object found. Retrying ${retry + 1}/${MAX_RETRIES}...`
+                    );
+
+                    messages.push({
+                        role: "user",
+                        content: `
+                                Previous response did not contain a JSON object at all.
+
+                                Return ONLY one JSON object, nothing else:
+
+                                {
+                                "scene_number": ${scene.scene_number},
+                                "prompt": "",
+                                "style": "",
+                                "negative_prompt": "",
+                                "ltx_settings": ""
+                                }
+`
+                    });
+
+                    return generateOneScenePrompt(scene, retry + 1);
+                }
+
+                throw new Error(
+                    `Scene ${scene.scene_number}: No JSON object found after ${MAX_RETRIES} retries.`
+                );
             }
 
             cleanJson = cleanJson.substring(start, end + 1);
@@ -303,6 +350,10 @@ const ollama = async (req, res) => {
             try {
                 parsed = JSON.parse(cleanJson);
             } catch (err) {
+                if (controller.signal.aborted) {
+                    throw new DOMException("Generation cancelled", "AbortError");
+                }
+
                 if (retry < MAX_RETRIES) {
                     console.log(
                         `Scene ${scene.scene_number}: JSON parse failed. Retrying ${retry + 1}/${MAX_RETRIES}...`
@@ -345,6 +396,10 @@ const ollama = async (req, res) => {
                 typeof result.prompt !== "string" ||
                 result.prompt.trim().length === 0
             ) {
+                if (controller.signal.aborted) {
+                    throw new DOMException("Generation cancelled", "AbortError");
+                }
+
                 if (retry < MAX_RETRIES) {
                     console.log(
                         `Scene ${scene.scene_number}: Empty prompt returned. Retrying ${retry + 1}/${MAX_RETRIES}...`
@@ -392,7 +447,7 @@ const ollama = async (req, res) => {
 
             // cancel the generation
             if (controller.signal.aborted) {
-                throw new Error("Generation cancelled");
+                throw new DOMException("Generation cancelled", "AbortError");
             }
 
             const scene = sceneList[i];
@@ -471,21 +526,29 @@ const ollama = async (req, res) => {
         console.log("imagePrompts", imagePrompts);
         console.log("All scene image prompts generated.");
     } catch (err) {
-        console.error(err);
+        const wasCancelled = err.name === "AbortError" || controller.signal.aborted;
+
+        if (wasCancelled) {
+            console.log(`Job ${jobId}: cancelled by user.`);
+        } else {
+            console.error(err);
+        }
 
         progressStore.set(jobId, {
             progress: 0,
-            status: "failed",
-            error: err.message
+            status: wasCancelled ? "cancelled" : "failed",
+            error: wasCancelled ? "Generation cancelled by user" : err.message
         });
 
         if (!res.headersSent) {
-            return res.status(500).json({
-                success: false,
-                error: err.message
+            return res.status(wasCancelled ? 200 : 500).json({
+                success: !wasCancelled ? false : true,
+                cancelled: wasCancelled,
+                error: wasCancelled ? undefined : err.message
             });
         }
     } finally {
+        controller.signal.removeEventListener("abort", onAbort);
         runningJobs.delete(jobId);
     }
 };

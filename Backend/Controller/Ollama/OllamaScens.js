@@ -8,6 +8,17 @@ const ollamaScences = async (req, res) => {
     const jobId = Date.now().toString();
     const controller = new AbortController();
     runningJobs.set(jobId, controller);
+    runningJobs.get(jobId);
+    console.log("Stored controller:", runningJobs.get(jobId) === controller);
+
+    let activeReader = null;
+    const onAbort = () => {
+        console.log(`Job ${jobId}: abort signal received — cancelling active reader`);
+        if (activeReader) {
+            activeReader.cancel().catch(() => { });
+        }
+    };
+    controller.signal.addEventListener("abort", onAbort);
 
     progressStore.set(jobId, {
         progress: 0,
@@ -212,6 +223,7 @@ const ollamaScences = async (req, res) => {
             }
 
             const reader = response.body.getReader();
+            activeReader = reader;
             const decoder = new TextDecoder();
 
             let raw = "";
@@ -226,7 +238,7 @@ const ollamaScences = async (req, res) => {
                 console.log(`(retry attempt ${retry}/${MAX_RETRIES})`);
             }
 
-            const estimatedTotalCharacters = scene.sceneCount * 1450;
+            const estimatedTotalCharacters = scene.sceneCount * 1550;
 
             progressStore.set(jobId, {
                 progress: 0,
@@ -256,7 +268,7 @@ const ollamaScences = async (req, res) => {
                 const filled = Math.round((progress / 100) * barLength);
                 const bar = "█".repeat(filled) + "░".repeat(barLength - filled);
 
-                console.clear();
+                // console.clear();
 
                 progressStore.set(jobId, {
                     progress: Number(progress.toFixed(1)),
@@ -287,6 +299,8 @@ const ollamaScences = async (req, res) => {
                         await reader.cancel();
                     } catch (e) {
                         console.log("Reader cancel error:", e.message);
+                    } finally {
+                        activeReader = null;
                     }
 
                     throw new Error("Generation cancelled");
@@ -318,7 +332,7 @@ const ollamaScences = async (req, res) => {
 
                             const totalTime = (Date.now() - startTime) / 1000;
 
-                            console.clear();
+                            // console.clear();
                             console.log("====================================");
                             console.log("       ✅ GENERATION COMPLETE");
                             console.log("====================================");
@@ -356,7 +370,7 @@ const ollamaScences = async (req, res) => {
 
                     return generateScreenplay(messages, retry + 1);
                 }
-                
+
                 throw new Error(
                     "Ollama returned empty response after retries"
                 );
@@ -409,6 +423,11 @@ const ollamaScences = async (req, res) => {
                     data: parsed
                 });
 
+                controller.signal.removeEventListener("abort", onAbort);
+                runningJobs.delete(jobId);
+
+                console.log("Remaining jobs:", [...runningJobs.keys()]);
+
                 const category = parsed.screenplay.company_name;
                 const brand = parsed.screenplay.brand_name;
                 const topic = parsed.screenplay.topic; // testimonials
@@ -439,27 +458,30 @@ const ollamaScences = async (req, res) => {
                     (item) => item.name === brand
                 );
 
+                // Check brand folder
                 if (!brandFolder) {
-                    brandFolder = {
+
+                    imagePrompt.brands.push({
                         name: brand,
-                        topics: []
-                    };
-
-                    imagePrompt.brands.push(brandFolder);
-                }
-
-                // Check topic folder
-                let topicFolder = brandFolder.topics.find(
-                    (item) => item.name === topic
-                );
-
-                if (!topicFolder) {
-                    brandFolder.topics.push({
-                        name: topic,
-                        scene_prompts: [parsed]
+                        topics: [{
+                            name: topic,
+                            scene_prompts: [parsed]
+                        }]
                     });
                 } else {
-                    topicFolder.scene_prompts = [parsed];
+
+                    let topicFolder = brandFolder.topics.find(
+                        (item) => item.name === topic
+                    );
+
+                    if (!topicFolder) {
+                        brandFolder.topics.push({
+                            name: topic,
+                            scene_prompts: [parsed]
+                        });
+                    } else {
+                        topicFolder.scene_prompts = [parsed];
+                    }
                 }
 
                 imagePrompt.markModified("brands");

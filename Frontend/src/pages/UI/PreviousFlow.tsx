@@ -2,17 +2,31 @@ import { Folder, FileText, FolderOpen, ChevronRight, ChevronDown, Image as Image
 import { useState, useEffect, useContext } from "react";
 import axios from "axios";
 import { AppContext } from "../../Context/createContent";
+import { useNavigate } from "react-router-dom";
 
 function PreviousFlow() {
+    const navigate = useNavigate();
     const [data, setData] = useState<any[]>([]);
     const [selected, setSelected] = useState<any>(null);
     const [loading, setLoading] = useState(false);
     const context = useContext(AppContext);
     const BackendUrl = context?.BackendUrl as string;
+    const [responseData, setResponseData] = useState<any>(null);
+
+    useEffect(() => {
+        const webContent = localStorage.getItem("responseData");
+
+        if (webContent) {
+            const data = JSON.parse(webContent);
+            setResponseData(data);
+        }
+    }, []);
 
     // openFolders now tracks category ids, openBrands tracks composite "categoryId-brandIndex" keys
     const [openFolders, setOpenFolders] = useState<number[]>([]);
     const [openBrands, setOpenBrands] = useState<string[]>([]);
+
+    console.log(selected);
 
     const toggleFolder = (id: number) => {
         setOpenFolders((prev) =>
@@ -52,9 +66,10 @@ function PreviousFlow() {
                             images: (topic.image_prompts || [])
                                 .filter((img: any) => img.image_url)
                                 .map((img: any) => img.image_url),
-
-                            imagePrompt: (topic.image_prompts || []).map((img: any) => img.prompt),
-                            videos: topic.video_prompts || []
+                            scenes: (topic.scene_prompts[topicIndex] || []),
+                            imagePrompt: (topic.image_prompts || []),
+                            videosPrompt: (topic.video_prompts || []),
+                            videos: (topic.video_prompts || []).filter((video: any) => video.video_url).map((video: any) => video.video_url),
                         }))
                     }))
                 }));
@@ -65,7 +80,7 @@ function PreviousFlow() {
                 if (projects.length && projects[0].brands.length && projects[0].brands[0].topics.length) {
                     setSelected(projects[0].brands[0].topics[0]);
                     setOpenFolders([projects[0].id]);
-                    setOpenBrands([`${projects[0].id}-0`]);
+                    setOpenBrands([`${projects[0].id}    -0`]);
                 }
             } catch (error) {
                 console.log(error);
@@ -76,6 +91,25 @@ function PreviousFlow() {
 
         fetchProjects();
     }, []);
+
+
+    const clickEvent = (img: string, index: number) => {
+
+        navigate("/images", {
+            state: {
+                data: {
+                    image_prompts: [selected.imagePrompt[index]], // only the clicked image prompt
+                },
+                requirements: responseData?.metadata?.requirements,
+                webContent: responseData?.markdown,
+                from: location.pathname,
+                scenes: selected.scenes, // optional: matching scene
+                uploaded: [img],                  // only the clicked image
+            },
+        });
+
+        console.log(selected.scenes);
+    }
 
     return (
         <div className="h-screen bg-[#111827] text-white flex">
@@ -193,20 +227,51 @@ function PreviousFlow() {
                         </h2>
 
                         {/* Images */}
-                        <h3 className="flex items-center gap-2 text-lg mb-4">
-                            <ImageIcon size={20} />
-                            Images
-                        </h3>
+                        <div className="flex justify-between">
+                            <h3 className="flex items-center gap-2 text-lg mb-4">
+                                <ImageIcon size={20} />
+                                Images
+                            </h3>
+                            {selected.imagePrompt.length > 0 && <button className="px-2 bg-[image:var(--gradient-primary)] py-2 rounded-lg mb-5 hover:bg-[image:var(--gradient-glow)] cursor-pointer" onClick={() =>
+                                navigate(`/images`,
+                                    {
+                                        state: {
+                                            data: { image_prompts: selected.imagePrompt },
+                                            requirements: responseData.metadata.requirements,
+                                            webContent: responseData.markdown,
+                                            from: location.pathname,
+                                            scenes: selected.scenes,
+                                            uploaded: selected.images
+                                        },
+                                        replace: true
+                                    })}
+                            >Images Flow</button>}
+                        </div>
 
-                        <div className="grid grid-cols-3 gap-5 mb-10">
+
+                        <div className="grid grid-cols-3 gap-5 mb-10" >
                             {selected.images.length ? (
                                 selected.images.map((img: string, index: number) => (
-                                    <img
+                                    <div
                                         key={index}
-                                        src={img}
-                                        alt=""
-                                        className="rounded-xl border border-gray-700 object-cover w-full h-52"
-                                    />
+                                        className="rounded-xl overflow-hidden border border-gray-700 relative group"
+                                    >
+                                        <img
+                                            src={img}
+                                            alt=""
+                                            className="w-full h-52 object-cover cursor-pointer transition-transform duration-300 group-hover:scale-105"
+
+                                        />
+
+                                        <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                                            <button
+                                                className="px-5 py-2 bg-green-500 hover:bg-green-600 text-white font-semibold rounded-full shadow-lg transition cursor-pointer"
+                                                onClick={() => clickEvent(img, index)}
+                                            >
+                                                Regenerate
+                                            </button>
+                                        </div>
+                                    </div>
                                 ))
                             ) : (
                                 <div className="text-gray-500">No images generated.</div>

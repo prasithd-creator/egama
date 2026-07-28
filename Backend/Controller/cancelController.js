@@ -9,24 +9,36 @@ export const cancelGeneration = (req, res) => {
         ? JSON.parse(req.body)
         : req.body;
 
-    const { jobId } = body;
+    const jobId = String(body.jobId);
 
     console.log("Cancelling:", jobId);
 
     const controller = runningJobs.get(jobId);
+    console.log("Stored controller:", controller);
 
-    if (controller) {
-        controller.abort();
+    if (!controller) {
+        console.log(`Cancel requested for unknown/finished job: ${jobId}`);
+        console.log("Current known job IDs:", [...runningJobs.keys()]);
 
-        progressStore.set(jobId, {
-            progress: 0,
-            status: "cancelled"
+        return res.status(404).json({
+            success: false,
+            error: `No running job found for jobId ${jobId}`
         });
-
-        runningJobs.delete(jobId);
     }
 
+    console.log("Stored controller found — aborting:", jobId);
+
+    controller.abort();
+
+    progressStore.set(jobId, {
+        progress: 0,
+        status: "cancelled",
+        error: "Generation cancelled by user"
+    });
+
     return res.json({
-        success: true
+        success: true,
+        jobId,
+        status: "cancelled"
     });
 };

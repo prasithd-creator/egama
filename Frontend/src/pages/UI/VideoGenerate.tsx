@@ -7,10 +7,13 @@ import { useContext } from "react";
 import { AppContext } from "../../Context/createContent";
 import useLMNT from "../../API/LMNT";
 
+const STORAGE_KEY = "videoPageState";
+const JOB_STORAGE_KEY = "imagesPageActiveJob";
+
 function VideoGenerate() {
     const location = useLocation();
     const navigate = useNavigate();
-    const state = location.state as any;
+    
     const context = useContext(AppContext);
     const backendUrl = context?.BackendUrl as string;
     const [loading, setLoading] = useState<boolean>(false);
@@ -80,11 +83,33 @@ function VideoGenerate() {
     const [progress, setProgress] = useState(0);
     const { voiceModel } = context as any;
     const [audioList, setAudioList] = useState<any>([]);
-
+    const allStatesRef = useRef<any>(
+        location?.state ??
+        (() => {
+            try {
+                const cached = sessionStorage.getItem(STORAGE_KEY);
+                return cached ? JSON.parse(cached) : null;
+            } catch {
+                return null;
+            }
+        })()
+    );
+    const allStates = allStatesRef.current;
+    const state = allStates as any;
     console.log(state);
     console.log(videoPrompt);
     console.log(Array.isArray(videoPrompt));
     console.log(typeof videoPrompt);
+
+    useEffect(() => {
+        if (location.state) {
+            try {
+                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(location.state));
+            } catch {
+                // ignore quota errors
+            }
+        }
+    }, [location.state]);
 
     useEffect(() => {
         setVideoPrompt(state?.videoPrompt?.data);

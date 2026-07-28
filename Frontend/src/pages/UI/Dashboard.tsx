@@ -160,80 +160,6 @@ export default function ChatGPTUrlScreen() {
         setReferenceImg(productImages);
     }, [responseData?.markdown]);
 
-    // useEffect(() => {
-    //     if (!responseData?.markdown) return;
-
-    //     let cancelled = false;
-
-    //     const analyzeProductImages = async () => {
-    //         setAnalyzeLoading(true);
-    //         setTimer(0);
-    //         timerRef.current = setInterval(() => {
-    //             setTimer((prev: number) => prev + 1);
-    //         }, 1000);
-
-    //         // Reset progress UI for this stage
-    //         setProgress(0);
-    //         setElapsed(0);
-    //         setCharacters(0);
-    //         setGeneratedScenes(0);
-    //         setTotalScenes(0); // unknown until the backend extracts image URLs from the markdown
-
-    //         try {
-    //             const res = await axios.post(`${BackendUrl}/api/ollamaImageAnalysis`, {
-    //                 markdown: responseData.markdown,
-    //             });
-
-    //             if (!res.data.success) {
-    //                 throw new Error(res.data.message);
-    //             }
-
-    //             const jobId = res.data.jobId;
-    //             console.log(jobId);
-
-    //             const analysisResult = await pollOllamaJob(jobId, (progressData) => {
-    //                 if (cancelled) return;
-    //                 setProgress(progressData.progress);
-    //                 setRemaining(progressData.remaining);
-    //                 setElapsed(progressData.elapsed);
-    //                 setCharacters(progressData.characters);
-    //                 setGeneratedScenes(progressData.scenes);
-    //                 setTotalScenes(progressData.scenes);
-    //             });
-
-    //             if (cancelled) return;
-
-    //             if (!analysisResult) {
-    //                 throw new Error("Image analysis failed");
-    //             }
-
-    //             console.log(analysisResult);
-    //             // analysisResult shape: { jobId, productName, results: [{ imageUrl, product_detected, confidence, status, issues, summary }] }
-    //             // setImageAnalysisResults(analysisResult);
-    //         } catch (error) {
-    //             if (cancelled) return;
-    //             console.log(error);
-    //             toast.error((error as Error).message);
-    //         } finally {
-    //             if (timerRef.current) {
-    //                 clearInterval(timerRef.current);
-    //             }
-    //             if (!cancelled) {
-    //                 setAnalyzeLoading(false);
-    //             }
-    //         }
-    //     };
-
-    //     analyzeProductImages();
-
-    //     return () => {
-    //         cancelled = true;
-    //         if (timerRef.current) {
-    //             clearInterval(timerRef.current);
-    //         }
-    //     };
-    // }, [responseData?.markdown]);
-
 
 
     //submit the URL
@@ -366,10 +292,6 @@ export default function ChatGPTUrlScreen() {
             });
 
             // ---- Stage 2: generate the image prompts ----
-            // The backend receives the FULL screenplay and internally generates
-            // one image prompt per scene, scene by scene, reporting continuous
-            // progress under a single jobId. It only resolves once every scene's
-            // prompt has been generated.
             setStage(2);
             setTotalScenes(screenplay?.screenplay?.scene_count ?? 0);
             setGenerateScenes("Ollama is Generating the Prompts...");
@@ -385,6 +307,7 @@ export default function ChatGPTUrlScreen() {
             });
 
             const promptJobId = promptRes.data.jobId;
+            setScenesJobId(promptJobId);
 
             const prompt = await pollOllamaJob(promptJobId, (progressData) => {
                 setProgress(progressData.progress);

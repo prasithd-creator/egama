@@ -5,6 +5,8 @@ export const uploadImages = async (req, res) => {
     try {
         const { companyName, brandName, topicName, sceneNumber, imageUrl } = req.body;
 
+        console.log(companyName, brandName, topicName, sceneNumber, imageUrl);
+
         // Find category
         const imagePrompt = await ImagePrompt.findOne({
             category: companyName,

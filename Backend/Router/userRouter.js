@@ -15,6 +15,7 @@ import { getMongoData } from "../Controller/UploadDB/getMongoData.js";
 import {cancelGeneration} from "../Controller/cancelController.js";
 import ollamaImageAnalysis from "../Controller/Ollama/OllamaImageAnalysis.js";
 import textToSpeech from "../Controller/LMNT/textToSpeech.js";
+import reGenerateOllamaPrompt from "../Controller/Ollama/ReGenerateOllamaPrompt.js";
 
 
 const userRouter = express.Router();
@@ -37,6 +38,7 @@ userRouter.get("/getMongoData", getMongoData);
 userRouter.post("/cancelGeneration", cancelGeneration);
 userRouter.post("/ollamaImageAnalysis", ollamaImageAnalysis);
 userRouter.post("/textToSpeech", textToSpeech);
+userRouter.post("/reGenerateOllamaPrompt", reGenerateOllamaPrompt);
 
 
 export default userRouter;

@@ -2,21 +2,40 @@ import { useLocation, useNavigate } from "react-router"
 import { useState, useContext, useEffect, useRef } from "react";
 import workflow from "../../Comfy_Api/imageAPI-Img";
 import { AppContext } from "../../Context/createContent";
-import axios, { all } from "axios";
+import axios from "axios";
 import { toast } from "react-toastify";
 import RegenerateIcon from "../../assets/re_generate.svg";
 import OllamaProgress from "./OllamaProgress";
+
+const STORAGE_KEY = "imagesPageState";
+const JOB_STORAGE_KEY = "imagesPageActiveJob";
 
 function Images() {
     const location = useLocation();
     const navigate = useNavigate();
     const context = useContext(AppContext);
-    const allStates = location?.state as any;
-    const state = location?.state?.data?.image_prompts as any;
-    const responseData = state;
-    const requirements = location?.state?.requirements as any;
+    const allStatesRef = useRef<any>(
+        location?.state ??
+        (() => {
+            try {
+                const cached = sessionStorage.getItem(STORAGE_KEY);
+                return cached ? JSON.parse(cached) : null;
+            } catch {
+                return null;
+            }
+        })()
+    );
+    const allStates = allStatesRef.current;
+    const state = allStates?.data?.image_prompts as any;
+    const [imgPromptState, setImgPromptState] = useState(state);
+    const requirements = allStates?.requirements as any;
     const [loading, setLoading] = useState<boolean>(false);
-    const [imagegenerate, setImagegenerate] = useState<string[] | any>(["https://res.cloudinary.com/dwdllwrim/image/upload/v1783928702/comfyui/hcdhd7j7iuo9tlsrk3k9.png", "https://res.cloudinary.com/dwdllwrim/image/upload/v1783683976/comfyui/urlk3hydhtcoe8gfmdsm.png"]);
+    const defaultImages = [
+        "https://res.cloudinary.com/dwdllwrim/image/upload/v1783928702/comfyui/hcdhd7j7iuo9tlsrk3k9.png",
+        "https://res.cloudinary.com/dwdllwrim/image/upload/v1783683976/comfyui/urlk3hydhtcoe8gfmdsm.png",
+    ];
+    const images = imgPromptState?.map((item: any) => item.image_url).filter(Boolean) ?? [];
+    const [imagegenerate, setImagegenerate] = useState<string[]>(images.length ? images : defaultImages);
     const [selectedImage, setSelectedImage] = useState<string | null>(null);
     const backendUrl = context?.BackendUrl as string;
     const [videoPrompt, setVideoPrompt] = useState<any>(null);
@@ -24,169 +43,254 @@ function Images() {
     const [uploading, setUploading] = useState<boolean>(false);
     const [comfyImage, setComfyImage] = useState<any>(null);
     const [generateLoading, setGenerateLoading] = useState<boolean>(false);
-    const referencesImg = location?.state?.uploaded as any;
-    const companyDetails = location?.state?.details as any;
-    const webContent = location?.state?.webContent as any;
+    const referencesImg = allStates?.uploaded as any;
+    const companyDetails = allStates?.details as any;
+    const webContent = allStates?.webContent as any;
     const [timer, setTimer] = useState<any>(0);
     const timerRef = useRef<any>(null);
     const cancelledRef = useRef(false);
     const [progress, setProgress] = useState(0);
-    const scenes = location?.state?.scenes?.screenplay?.scenes as any;
+    const scenes = allStates?.scenes?.screenplay?.scenes as any;
     const [elapsed, setElapsed] = useState(0);
     const [characters, setCharacters] = useState(0);
     const [generatedScenes, setGeneratedScenes] = useState(0);
     const [totalScenes, setTotalScenes] = useState<number | null>(null);
     const [remaining, setRemaining] = useState<number | null>(null);
     const [generateScenes, setGenerateScenes] = useState<string>("Generate Video Prompt");
+    const [jobId, setJobId] = useState<string | null>(null);
+    const [editIndex, setEditIndex] = useState<number | null>(null);
+    const [promptChange, setPromptChange] = useState<string>("");
+    const activeGenerationRef = useRef(false);
+
+    // Tracks *what kind* of job jobId refers to, so a resumed job after a
+    // refresh knows where to apply its result (which index / which flow).
+    const jobMetaRef = useRef<{ type: "regenerate" | "videoPrompt"; index?: number } | null>(null);
+
 
     console.log(allStates?.details?.title);
     console.log(allStates)
     //combin the prompt and negative prompt
-    const combined = state?.map((item: any) => ({
+    const combined = imgPromptState?.map((item: any) => ({
         combined_prompt: `Prompt: ${item.prompt}, \nNegative Prompt: ${item.negative_prompt}`,
     }));
-    console.log(state);
+
+    console.log(combined);
+
+    console.log(scenes);
 
 
-    //prevent the user from going back
+    // Cache the initial navigation payload as soon as we land with real router state
     useEffect(() => {
-        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
-            if (generateLoading) {
-                e.preventDefault();
-                e.returnValue = ""; // Required for most browsers
+        if (location.state) {
+            try {
+                sessionStorage.setItem(STORAGE_KEY, JSON.stringify(location.state));
+            } catch {
+                // ignore quota errors
+            }
+        }
+    }, [location.state]);
+
+    // Keep the cached copy in sync with edits (prompt regeneration etc.) so a
+    // refresh mid-edit restores the latest prompts, not the original ones.
+    useEffect(() => {
+        if (!allStates) return;
+        try {
+            const merged = {
+                ...allStates,
+                data: { ...allStates.data, image_prompts: imgPromptState }
+            };
+            sessionStorage.setItem(STORAGE_KEY, JSON.stringify(merged));
+        } catch {
+            // ignore quota errors
+        }
+    }, [imgPromptState]);
+
+
+
+    // If there's truly nothing to show (first visit, no cache), bounce back
+    useEffect(() => {
+        if (!allStates) {
+            navigate("/", { replace: true });
+        }
+    }, []);
+
+
+    // ----------------------------
+    // RESUME AN IN-FLIGHT JOB AFTER A REFRESH
+    // ----------------------------
+    useEffect(() => {
+        let cached: any = null;
+        try {
+            const raw = sessionStorage.getItem(JOB_STORAGE_KEY);
+            cached = raw ? JSON.parse(raw) : null;
+        } catch {
+            cached = null;
+        }
+
+        if (!cached?.jobId) return;
+
+        const { jobId: savedJobId, type, index } = cached;
+
+        setJobId(savedJobId);
+        setGenerateLoading(true);
+        activeGenerationRef.current = true;
+        jobMetaRef.current = { type, index };
+
+        if (type === "regenerate") {
+            setGenerateScenes("Regenerating prompt...");
+        } else {
+            setGenerateScenes("Generating Video Prompt...");
+            setTimer(0);
+            timerRef.current = setInterval(() => {
+                setTimer((prev: number) => prev + 1);
+            }, 1000);
+        }
+
+        pollOllamaJob(savedJobId, (progressData) => {
+            setProgress(progressData.progress ?? 0);
+            if (type === "videoPrompt") {
+                setRemaining(progressData.remaining);
+                setElapsed(progressData.elapsed);
+                setCharacters(progressData.characters);
+                setGeneratedScenes(progressData.scenes);
+            }
+        })
+            .then(async (result) => {
+                if (type === "regenerate" && typeof index === "number") {
+                    setImgPromptState((prev: any[]) => {
+                        const updated = [...prev];
+                        updated[index] = {
+                            ...updated[index],
+                            prompt: result.prompt
+                        };
+                        return updated;
+                    });
+                } else if (type === "videoPrompt") {
+                    setVideoPrompt(result);
+                    const uploaded = await uploadComfy(imagegenerate);
+                    navigate("/videos", {
+                        state: {
+                            details: imgPromptState,
+                            videoPrompt: result,
+                            image: imagegenerate,
+                            comfyImage: uploaded
+                        }
+                    });
+                }
+            })
+            .catch((err) => {
+                console.log("Resumed job failed:", err);
+                toast.error("Previous generation could not be resumed");
+            })
+            .finally(() => {
+                if (timerRef.current) clearInterval(timerRef.current);
+                activeGenerationRef.current = false;
+                jobMetaRef.current = null;
+                setGenerateLoading(false);
+                setJobId(null);
+            });
+
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // Persist / clear the active job descriptor whenever jobId changes
+    useEffect(() => {
+        if (jobId && jobMetaRef.current) {
+            sessionStorage.setItem(
+                JOB_STORAGE_KEY,
+                JSON.stringify({ jobId, ...jobMetaRef.current })
+            );
+        } else {
+            sessionStorage.removeItem(JOB_STORAGE_KEY);
+        }
+    }, [jobId]);
+
+
+    // ----------------------------
+    // NAVIGATION GUARDS
+    // ----------------------------
+    useEffect(() => {
+        if (!activeGenerationRef.current) return;
+
+        const cancelJob = () => {
+            if (!jobId) return;
+            console.log("Cancelling job:", jobId);
+            navigator.sendBeacon(
+                `${backendUrl}/api/cancelGeneration`,
+                JSON.stringify({
+                    jobId: jobId
+                })
+            );
+            sessionStorage.removeItem(JOB_STORAGE_KEY);
+        };
+
+
+        // Browser back button — only place we can actually ask & branch on the answer
+        const handlePopState = () => {
+            if (!generateLoading && !jobId) return;
+
+            const confirmLeave = window.confirm(
+                "Generation is still running. Do you want to leave and cancel it?"
+            );
+
+            if (confirmLeave) {
+                cancelJob();
+                window.history.back();
+            } else {
+                window.history.pushState(null, "", window.location.href);
             }
         };
 
-        window.addEventListener("beforeunload", handleBeforeUnload);
 
-        return () => {
-            window.removeEventListener("beforeunload", handleBeforeUnload);
+        // Refresh / close tab — browsers only show their own generic prompt here,
+        // there's no way to run custom confirm logic or know which the user chose
+        // ahead of time. We warn, but we do NOT cancel the job on unload anymore —
+        // the job keeps running on the backend and gets resumed on next mount
+        // (see the "RESUME AN IN-FLIGHT JOB" effect above).
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+            if (!generateLoading && !jobId) return;
+
+            e.preventDefault();
+            e.returnValue = "";
         };
-    }, [generateLoading]);
+
+
+        // create history lock
+        window.history.pushState(null, "", window.location.href);
+        window.addEventListener("popstate", handlePopState);
+
+        window.addEventListener(
+            "beforeunload",
+            handleBeforeUnload
+        );
+
+        console.log("runing")
+        return () => {
+            window.removeEventListener(
+                "popstate",
+                handlePopState
+            );
+
+            window.removeEventListener(
+                "beforeunload",
+                handleBeforeUnload
+            );
+        };
+
+
+
+    }, [generateLoading, jobId]);
 
 
     /// final code
     const sleep = (ms: number) =>
         new Promise((resolve) => setTimeout(resolve, ms));
 
-    const prompts = responseData;
+    const prompts = imgPromptState;
 
     // ----------------------------
     // GENERATE IMAGE on Comfy UI
     // ----------------------------
-    // const generateImage = async () => {
-    //     try {
-    //         cancelledRef.current = false;
-    //         setLoading(true);
-    //         const results: string[] = [];
-
-    //         // LOOP PROMPTS ONE BY ONE
-    //         for (const p of prompts) {
-    //             if (cancelledRef.current) {
-    //                 console.log("Generation stopped.");
-    //                 break;
-    //             }
-
-    //             const wf = structuredClone(workflow);
-
-    //             // references images prompt
-    //             wf["135"].inputs.text = p; // your CLIPTextEncode node
-
-    //             wf["125"].inputs.noise_seed = Math.floor(Math.random() * 999999999);
-
-
-    //             if (referencesImg?.length >= 2) {
-    //                 wf["76"].inputs.image = referencesImg[0];
-    //                 wf["81"].inputs.image = referencesImg[1];
-    //             } else {
-    //                 throw new Error("Need 2 input images");
-    //             }
-
-    //             console.log("Sending prompt:", p);
-
-    //             // 1. SEND REQUEST
-    //             const res = await fetch("/api/prompt", {
-    //                 method: "POST",
-    //                 headers: { "Content-Type": "application/json" },
-    //                 body: JSON.stringify({ prompt: wf }),
-    //             });
-
-    //             const data = await res.json();
-    //             const promptId = data.prompt_id;
-    //             const ws = new WebSocket("ws://192.168.0.161:5454/ws");
-
-    //             ws.onmessage = (event) => {
-    //                 const msg = JSON.parse(event.data);
-
-    //                 if (msg.type === "progress") {
-    //                     const { value, max } = msg.data;
-
-    //                     const percent = Math.round((value / max) * 100);
-
-    //                     setProgress(percent);
-    //                     console.log("Progress:", percent);
-    //                 }
-
-    //                 if (
-    //                     msg.type === "executing" &&
-    //                     msg.data.node === null &&
-    //                     msg.data.prompt_id === promptId
-    //                 ) {
-    //                     setProgress(100);
-    //                     ws.close();
-    //                 }
-    //             };
-    //             if (!promptId) continue;
-
-    //             // 2. WAIT FOR IMAGE
-    //             let imageUrl = null;
-
-    //             for (let i = 0; i < 20; i++) {
-    //                 console.log(cancelledRef.current);
-    //                 if (cancelledRef.current) {
-    //                     console.log("Generation cancelled by user.");
-    //                     break;
-    //                 }
-    //                 await sleep(3000);
-
-    //                 const historyRes = await fetch(`/api/history/${promptId}`);
-    //                 const history = await historyRes.json();
-    //                 console.log("History:", history);
-
-    //                 const job = history?.[promptId];
-
-    //                 if (!job) {
-    //                     break;
-    //                 }
-
-    //                 if (job.status?.status_str === "error") {
-    //                     console.log("Generation interrupted.");
-    //                     break;
-    //                 }
-
-    //                 const image = job.outputs?.["94"]?.images?.[0];
-
-    //                 if (image) {
-    //                     imageUrl = `http://192.168.0.161:5454/api/view?filename=${image.filename}`;
-    //                     break;
-    //                 }
-    //             }
-
-    //             if (imageUrl) {
-    //                 results.push(imageUrl);
-    //                 setRegenerate(true);
-    //                 setImagegenerate([...results]); // update UI live
-    //             }
-
-
-    //         }
-    //     } catch (err) {
-    //         console.error(err);
-    //         toast.error("Failed to generate images");
-    //     } finally {
-    //         setLoading(false);
-    //     }
-    // };
 
     // Common function: generates ONE image
     const generateSingleImage = async (p: string) => {
@@ -373,6 +477,11 @@ function Images() {
                         clearInterval(interval);
                         reject(new Error(progressData.error || "Generation failed"));
                     }
+
+                    if (progressData.status === "cancelled") {
+                        clearInterval(interval);
+                        reject(new Error("Generation cancelled"));
+                    }
                 } catch (error) {
                     clearInterval(interval);
                     reject(error);
@@ -384,6 +493,7 @@ function Images() {
 
     ///Generate the Image to Video Prompt
     const generateVideoPrompt = async (data: any) => {
+        activeGenerationRef.current = true;
         setGenerateLoading(true);
         setTimer(0);
         timerRef.current = setInterval(() => {
@@ -412,9 +522,11 @@ function Images() {
                 throw new Error(res.data.message);
             }
 
-            const jobId = res.data.jobId;
+            const newJobId = res.data.jobId;
+            jobMetaRef.current = { type: "videoPrompt" };
+            setJobId(newJobId);
 
-            const videoPromptResult = await pollOllamaJob(jobId, (progressData) => {
+            const videoPromptResult = await pollOllamaJob(newJobId, (progressData) => {
                 setProgress(progressData.progress);
                 setRemaining(progressData.remaining);
                 setElapsed(progressData.elapsed);
@@ -430,7 +542,7 @@ function Images() {
             setVideoPrompt(videoPromptResult);
 
             const uploaded = await uploadComfy(data);
-            navigate("/videos", { state: { details: responseData, videoPrompt: videoPromptResult, image: data, comfyImage: uploaded } });
+            navigate("/videos", { state: {scenes: scenes, imagePrompts: imgPromptState, videoPrompt: videoPromptResult, image: data, comfyImage: uploaded } });
         } catch (error) {
             console.log(error);
         } finally {
@@ -438,7 +550,10 @@ function Images() {
             if (timerRef.current) {
                 clearInterval(timerRef.current);
             }
+            activeGenerationRef.current = false;
+            jobMetaRef.current = null;
             setGenerateLoading(false);
+            setJobId(null);
         }
     };
 
@@ -466,19 +581,16 @@ function Images() {
             if (res.data.success) {
 
                 const uploadedImages = res.data.urls;
+                console.log(uploadedImages);
 
 
                 // keep only urls for image processing
                 setImagegenerate(
                     uploadedImages.map((item: any) => item.secure_url)
                 );
-
-
                 generateVideoPrompt(
                     uploadedImages.map((item: any) => item.secure_url)
                 );
-
-
                 for (const item of uploadedImages) {
 
                     await axios.post(
@@ -543,13 +655,89 @@ function Images() {
     };
 
 
+    //Regenerate the prompt
+    const handlePromptChange = async (index: number) => {
+
+        const change = promptChange;
+        const imagePrompt = imgPromptState[index];
+
+        try {
+
+            activeGenerationRef.current = true;
+
+            setGenerateScenes("Ollama is thinking...");
+            setProgress(0);
+            setGenerateLoading(true);
+
+
+            const res = await axios.post(
+                `${backendUrl}/api/reGenerateOllamaPrompt`,
+                {
+                    prompt: imagePrompt.prompt,
+                    changes: change
+                }
+            );
+
+
+            if (!res.data.success || !res.data.jobId) {
+                throw new Error(
+                    res.data.message || "Failed to start prompt regeneration"
+                );
+            }
+
+
+            setGenerateScenes("Regenerating prompt...");
+
+            const newJobId = res.data.jobId;
+            jobMetaRef.current = { type: "regenerate", index };
+            setJobId(newJobId);
+
+
+            const updatedPrompt = await pollOllamaJob(
+                newJobId,
+                (progressData) => {
+                    setProgress(progressData.progress ?? 0);
+                }
+            );
+
+
+            setImgPromptState((prev: any[]) => {
+                const updated = [...prev];
+
+                updated[index] = {
+                    ...updated[index],
+                    prompt: updatedPrompt.prompt
+                };
+
+                return updated;
+            });
+
+
+        } catch (error) {
+
+            console.log(
+                "Regenerate prompt error:",
+                error
+            );
+
+        } finally {
+
+            activeGenerationRef.current = false;
+            jobMetaRef.current = null;
+            setGenerateLoading(false);
+            setJobId(null);
+
+        }
+    };
+
+
     return (
         <div className="min-h-screen text-white p-6">
 
             {/* Header */}
             <div className={`flex items-center justify-between ${loading ? "mb-2" : "mb-10"}`}>
                 <div>
-                    <button onClick={() => navigate(-1)} className="cursor-pointer px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-all duration-200 ease-in-out">Back</button>
+                    <button onClick={() => navigate(allStates?.from || "/", { replace: true })} className="cursor-pointer px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-all duration-200 ease-in-out">Back</button>
                 </div>
                 <div>
                     <h1 className="text-3xl font-bold">Image Prompts</h1>
@@ -635,7 +823,7 @@ function Images() {
                         {combined?.map((item: any, index: number) => (
                             <div
                                 key={index}
-                                className="flex gap-4 bg-[#111827] border border-gray-700 rounded-2xl p-4 hover:border-green-500 transition-all"
+                                className={`${editIndex === index ? "pb-16" : ""} relative flex gap-4 bg-[#111827] border border-gray-700 rounded-2xl p-4 transition-all`}
                             >
                                 {/* Index */}
                                 <div className="p-2 px-4 h-fit flex items-center justify-center rounded-xl bg-green-500 text-black font-bold">
@@ -643,9 +831,42 @@ function Images() {
                                 </div>
 
                                 {/* Text */}
-                                <p className="text-gray-300 text-sm leading-relaxed">
+                                <p className="text-gray-300 text-sm leading-relaxed mt-2 pr-2">
                                     {item?.combined_prompt}
                                 </p>
+
+                                {/* Edit Button */}
+                                <button
+                                    className={`absolute top-2 right-2 flex items-center justify-center text-gray-400 hover:text-white border border-gray-800 hover:border-[var(--primary)] hover:scale-110 transition-all duration-200 px-2 py-1.5 rounded-full cursor-pointer ${editIndex === index
+                                        ? "bg-[var(--primary)] text-white" : "bg-gray-800"}`}
+                                    onClick={() => setEditIndex(index)} title="Edit"
+                                >
+                                    <span className="material-symbols-outlined text-[20px]">
+                                        edit
+                                    </span>
+                                </button>
+
+                                {/* Edit Input */}
+                                {editIndex === index && (
+                                    <div className="absolute bottom-3 left-4 right-4 flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={promptChange}
+                                            onChange={(e) => setPromptChange(e.target.value)}
+                                            placeholder="Enter the changes..."
+                                            className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white text-sm outline-none hover:border-green-500 focus:border-green-500 focus:ring-2 focus:ring-green-500/30 transition-all"
+                                        />
+
+                                        <button
+                                            className="bg-green-500 hover:bg-green-600 text-black px-3 rounded-lg flex items-center justify-center cursor-pointer" title="Send Changes"
+                                            onClick={() => handlePromptChange(index)}
+                                        >
+                                            <span className="material-symbols-outlined">
+                                                send
+                                            </span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
 
@@ -754,7 +975,7 @@ function Images() {
                                 remaining={remaining}
                                 elapsed={elapsed}
                                 scenes={generatedScenes}
-                                totalScenes={allStates?.scenes?.screenplay?.scene_count}
+                                totalScenes={imgPromptState?.length}
                                 characters={characters}
                                 text={generateScenes}
                             />

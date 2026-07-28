@@ -1,6 +1,7 @@
 import axios from "axios";
 import progressStore from "../../utils/OllamaProgressStore.js";
 import ImagePrompt from "../../Models/imagePrompt.ts";
+import runningJobs from "../../utils/jobManager.js";
 
 const buildPrompt = ({ requirements, companyDetails, webContent, scene, imagePrompt }) => `
                      You are an LTX-2.3 Cinematic Prompt Engineer.
@@ -736,6 +737,20 @@ const buildPrompt = ({ requirements, companyDetails, webContent, scene, imagePro
 
 const ollamaVideoPrompt = async (req, res) => {
     const jobId = Date.now().toString();
+    const controller = new AbortController();
+    runningJobs.set(jobId, controller);
+
+    let activeReader = null;
+
+    const onAbort = () => {
+        console.log(`Job ${jobId}: abort signal received — cancelling active reader`);
+        if (activeReader) {
+            activeReader.cancel().catch(() => { });
+        }
+    }
+    controller.signal.addEventListener("abort", onAbort);
+    console.log("CREATE JOB", jobId);
+
     progressStore.set(jobId, {
         progress: 0,
         characters: 0,
@@ -779,31 +794,20 @@ const ollamaVideoPrompt = async (req, res) => {
         const totalImages = images.length;
         const startTime = Date.now();
 
-        // Estimate expected output size PER video-clip JSON object, so
-        // progress climbs continuously as tokens stream in, not just in a
-        // single jump when each image finishes.
         const estimatedCharsPerImage = 2000;
-        const estimatedTotalCharacters = totalImages * estimatedCharsPerImage;
 
-        let overallCharacters = 0; // cumulative chars across ALL images so far
+        let overallCharacters = 0;
         let completedImages = 0;
-        let currentImageCharacters = 0; // chars streamed for the scene currently in flight
+        let currentImageCharacters = 0;
 
-        const sliceSize = 100 / totalImages; // e.g. 2 scenes -> 50, 4 scenes -> 25
+        const sliceSize = 100 / totalImages;
 
         const emitProgress = () => {
             const elapsed = (Date.now() - startTime) / 1000;
-
-            // % already locked in from fully completed scenes
             const baseProgress = completedImages * sliceSize;
-
-            // % earned so far *within* the current scene, capped so it can
-            // never reach the next scene's boundary before that scene actually finishes
             const subProgressRatio = Math.min(currentImageCharacters / estimatedCharsPerImage, 0.98);
             const inProgress = subProgressRatio * sliceSize;
-
             let progress = Math.min(baseProgress + inProgress, 100);
-
             const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
             const remaining = estimatedTotal - elapsed;
 
@@ -819,13 +823,15 @@ const ollamaVideoPrompt = async (req, res) => {
 
         const processImage = async (imageUrl, scene, imagePrompt, retry = 0) => {
             try {
+                if (controller.signal.aborted) {
+                    throw new DOMException("Generation cancelled", "AbortError");
+                }
                 console.log("Processing:", imageUrl);
                 console.log("Scene:", scene);
                 console.log("Reference image prompt:", imagePrompt);
 
                 currentImageCharacters = 0;
 
-                // Download image from Cloudinary
                 const imageResponse = await axios.get(imageUrl, {
                     responseType: "arraybuffer",
                     timeout: 60000,
@@ -841,6 +847,7 @@ const ollamaVideoPrompt = async (req, res) => {
 
                 const response = await fetch("http://127.0.0.1:11434/api/chat", {
                     method: "POST",
+                    signal: controller.signal,
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
                         model: "qwen2.5vl:3b",
@@ -873,36 +880,51 @@ const ollamaVideoPrompt = async (req, res) => {
                 }
 
                 const reader = response.body.getReader();
+                activeReader = reader; // FIX: this line was missing
                 const decoder = new TextDecoder();
 
                 let raw = "";
                 let buffer = "";
 
-                while (true) {
-                    const { value, done } = await reader.read();
-                    if (done) break;
+                try {
+                    while (true) {
 
-                    buffer += decoder.decode(value, { stream: true });
+                        if (controller.signal.aborted) {
+                            console.log(`Job ${jobId}: aborted — cancelling reader and stopping stream`);
+                            await reader.cancel().catch(() => { });
+                            throw new DOMException("Generation cancelled", "AbortError");
+                        }
 
-                    const lines = buffer.split("\n");
-                    buffer = lines.pop() || "";
+                        const { value, done } = await reader.read();
+                        if (done) break;
 
-                    for (const line of lines) {
-                        if (!line.trim()) continue;
+                        buffer += decoder.decode(value, { stream: true });
 
-                        try {
-                            const json = JSON.parse(line);
+                        const lines = buffer.split("\n");
+                        buffer = lines.pop() || "";
 
-                            if (json.message?.content) {
-                                raw += json.message.content;
-                                overallCharacters += json.message.content.length;
-                                currentImageCharacters += json.message.content.length;
-                                emitProgress();
-                            }
-                        } catch {
-                            // Ignore incomplete JSON line
+                        for (const line of lines) {
+                            if (!line.trim()) continue;
+
+                            try {
+                                const json = JSON.parse(line);
+
+                                if (json.message?.content) {
+                                    raw += json.message.content;
+                                    overallCharacters += json.message.content.length;
+                                    currentImageCharacters += json.message.content.length;
+                                    emitProgress();
+                                }
+                            } catch {
+                                // Ignore incomplete JSON line
+                            } 
                         }
                     }
+                } finally {
+                    // FIX: clear activeReader once this stream is done so a
+                    // cancel event during a LATER image doesn't try to cancel
+                    // an already-finished reader.
+                    activeReader = null;
                 }
 
                 console.log("Raw Model Output:");
@@ -917,13 +939,34 @@ const ollamaVideoPrompt = async (req, res) => {
                 const start = cleanJson.indexOf("{");
                 const end = cleanJson.lastIndexOf("}");
 
+                // FIX: previously this proceeded straight to substring(start, end + 1)
+                // even if start/end were -1 (no braces found at all), producing
+                // garbage that would fail JSON.parse with no useful diagnostic.
+                if (start === -1 || end === -1) {
+                    if (controller.signal.aborted) {
+                        throw new DOMException("Generation cancelled", "AbortError");
+                    }
+
+                    console.log(`Scene ${scene?.scene_number ?? "?"}: NO JSON OBJECT FOUND. Raw output was:`);
+                    console.log(cleanJson);
+
+                    throw new Error(`Scene ${scene?.scene_number ?? "?"}: No JSON object found in model output.`);
+                }
+
                 cleanJson = cleanJson.substring(start, end + 1);
                 cleanJson = cleanJson.replace(/[\u0000-\u001F]+/g, " ");
 
-                // Throws if invalid -> caught below and retried
+                if (controller.signal.aborted) {
+                    throw new DOMException("Generation cancelled", "AbortError");
+                }
+
                 return JSON.parse(cleanJson);
 
             } catch (err) {
+                if (controller.signal.aborted) {
+                    throw new DOMException("Generation cancelled", "AbortError");
+                }
+
                 if (retry < MAX_RETRIES) {
                     console.log(
                         `Scene ${scene?.scene_number ?? "?"}: attempt ${retry + 1} failed (${err.message}). Retrying ${retry + 1}/${MAX_RETRIES}...`
@@ -944,6 +987,9 @@ const ollamaVideoPrompt = async (req, res) => {
         const results = [];
 
         for (let i = 0; i < images.length; i++) {
+            if (controller.signal.aborted) {
+                throw new DOMException("Generation cancelled", "AbortError");
+            }
             results.push(
                 await processImage(images[i], scenes[i], imagePrompts[i])
             );
@@ -969,9 +1015,19 @@ const ollamaVideoPrompt = async (req, res) => {
             }
         });
 
-        const category = sceneDetails.company_name;
-        const brand = sceneDetails.brand_name;
-        const topic = sceneDetails.topic;
+        // NOTE: sceneDetails is destructured with a default of [] (an array),
+        // but is accessed here as a plain object (sceneDetails.company_name).
+        // Every other file in this pipeline (Ollama.js, OllamaScences.js) uses
+        // scenes.screenplay.company_name instead. Confirm which shape your
+        // frontend actually sends for sceneDetails — this optional chaining
+        // just prevents a hard crash either way, it doesn't fix a shape mismatch.
+        const category = sceneDetails?.company_name ?? sceneDetails?.screenplay?.company_name;
+        const brand = sceneDetails?.brand_name ?? sceneDetails?.screenplay?.brand_name;
+        const topic = sceneDetails?.topic ?? sceneDetails?.screenplay?.topic;
+
+        if (!category || !brand || !topic) {
+            console.log("WARNING: category/brand/topic could not be resolved from sceneDetails:", sceneDetails);
+        }
 
         let imagePrompt = await ImagePrompt.findOne({
             category
@@ -985,22 +1041,34 @@ const ollamaVideoPrompt = async (req, res) => {
         }
 
         let brandFolder = imagePrompt.brands.find(b => b.name === brand);
-        if (!brandFolder) {
-            brandFolder = {
-                name: brand,
-                topics: []
-            };
-            imagePrompt.brands.push(brandFolder);
-        }
 
-        let topicsFolder = brandFolder.topics.find(t => t.name === topic);
-        if (!topicsFolder) {
-            brandFolder.topics.push({
-                name: topic,
-                video_prompts: results
+        if (!brandFolder) {
+            // FIX: same subdocument-push issue as Ollama.js — build the
+            // brand fully-formed (with its first topic) in a single push,
+            // rather than pushing an empty-topics object and mutating the
+            // local `brandFolder` variable afterward. Mongoose casts pushed
+            // plain objects into a NEW subdocument instance; the local
+            // variable you pushed is not the same object that ends up
+            // inside imagePrompt.brands, so mutating it after the fact
+            // silently gets lost on save.
+            imagePrompt.brands.push({
+                name: brand,
+                topics: [{
+                    name: topic,
+                    video_prompts: results
+                }]
             });
         } else {
-            topicsFolder.video_prompts = results;
+            let topicsFolder = brandFolder.topics.find(t => t.name === topic);
+
+            if (!topicsFolder) {
+                brandFolder.topics.push({
+                    name: topic,
+                    video_prompts: results
+                });
+            } else {
+                topicsFolder.video_prompts = results;
+            }
         }
 
         imagePrompt.markModified("brands");
@@ -1009,20 +1077,33 @@ const ollamaVideoPrompt = async (req, res) => {
         console.log("All scene video prompts generated.");
 
     } catch (err) {
-        console.error(err);
+        const wasCancelled = err.name === "AbortError" || controller.signal.aborted;
+
+        if (wasCancelled) {
+            console.log(`Job ${jobId}: cancelled by user.`);
+        } else {
+            console.error(err);
+        }
 
         progressStore.set(jobId, {
             progress: 0,
-            status: "failed",
-            error: err.message
+            status: wasCancelled ? "cancelled" : "failed",
+            error: wasCancelled ? "Generation cancelled by user" : err.message
         });
 
         if (!res.headersSent) {
-            return res.status(500).json({
-                success: false,
-                error: err.message,
+            return res.status(wasCancelled ? 200 : 500).json({
+                success: wasCancelled,
+                cancelled: wasCancelled,
+                error: wasCancelled ? undefined : err.message,
             });
         }
+    } finally {
+        // FIX: neither of these cleanup steps existed before — every job
+        // handled by this endpoint leaked its AbortController in runningJobs
+        // and its abort listener forever.
+        controller.signal.removeEventListener("abort", onAbort);
+        runningJobs.delete(jobId);
     }
 };
 
