@@ -6,6 +6,7 @@ import axios from "axios";
 import { useContext } from "react";
 import { AppContext } from "../../Context/createContent";
 import useLMNT from "../../API/LMNT";
+import { sendReGenerateVideoPrompt } from "../../Actions/sendReGenerateVideoPrompt";
 
 const STORAGE_KEY = "videoPageState";
 const JOB_STORAGE_KEY = "imagesPageActiveJob";
@@ -13,7 +14,7 @@ const JOB_STORAGE_KEY = "imagesPageActiveJob";
 function VideoGenerate() {
     const location = useLocation();
     const navigate = useNavigate();
-    
+
     const context = useContext(AppContext);
     const backendUrl = context?.BackendUrl as string;
     const [loading, setLoading] = useState<boolean>(false);
@@ -96,6 +97,9 @@ function VideoGenerate() {
     );
     const allStates = allStatesRef.current;
     const state = allStates as any;
+    const [selectedAudio, setSelectedAudio] = useState<any>(null);
+    const [editIndex, setEditIndex] = useState<any>(null);
+    const [promptChange, setPromptChange] = useState<any>(null);
     console.log(state);
     console.log(videoPrompt);
     console.log(Array.isArray(videoPrompt));
@@ -305,7 +309,11 @@ function VideoGenerate() {
         }
     };
 
-
+    const handlePromptChange = async (index: number) => {
+        console.log(index);
+       const res = await sendReGenerateVideoPrompt(videoPrompt[index].prompt, promptChange, allStates);
+       console.log(res);
+    }
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-6">
@@ -390,7 +398,7 @@ function VideoGenerate() {
                         {videoPrompt?.map((item: any, index: number) => (
                             <div
                                 key={index}
-                                className="flex gap-4 bg-[#111827] border border-gray-700 rounded-2xl p-4 flex-col"
+                                className={`flex gap-4 bg-[#111827] border border-gray-700 rounded-2xl p-4 flex-col relative ${index === editIndex ? "pb-16" : ""}`}
                             >
                                 <div className="px-4 w-fit h-fit py-2 bg-green-500 text-black font-bold rounded-xl">
                                     {index + 1}
@@ -403,27 +411,63 @@ function VideoGenerate() {
                                     {`Prompt:${item?.prompt};\n Negative Prompt: ${item?.negative_prompt}`}
                                 </p>
                                 <p>Voice Over:{item.voice_over_segment}</p>
-                                <p>{item.cta}</p>
+
+                                {/* //Edit button */}
+                                <button
+                                    className={`absolute top-2 right-2 flex items-center justify-center text-gray-400 hover:text-white border border-gray-800 hover:border-[var(--primary)] hover:scale-110 transition-all duration-200 px-2 py-1.5 rounded-full cursor-pointer ${editIndex === index
+                                        ? "bg-[var(--primary)] text-white" : "bg-gray-800"}`}
+                                    onClick={() => setEditIndex(index)} title="Edit"
+                                >
+                                    <span className="material-symbols-outlined text-[20px]">
+                                        edit
+                                    </span>
+                                </button>
+
+                                {/* Edit Input */}
+                                {editIndex === index && (
+                                    <div className="absolute bottom-3 left-4 right-4 flex gap-2 z-10">
+                                        <input
+                                            type="text"
+                                            value={promptChange}
+                                            onChange={(e) => setPromptChange(e.target.value)}
+                                            placeholder="Enter the changes..."
+                                            className="flex-1 bg-gray-900 border border-gray-600 rounded-lg px-4 py-2 text-white text-sm outline-none hover:border-green-500 focus:border-green-500 focus:ring-2 focus:ring-green-500/30 transition-all"
+                                        />
+
+                                        <button
+                                            className="bg-green-500 hover:bg-green-600 text-black px-3 rounded-lg flex items-center justify-center cursor-pointer" title="Send Changes"
+                                            onClick={() => handlePromptChange(index)}
+                                        >
+                                            <span className="material-symbols-outlined">
+                                                send
+                                            </span>
+                                        </button>
+                                    </div>
+                                )}
                             </div>
                         ))}
                     </div>
                 </div>
 
                 {/* VIDEO OUTPUT SECTION */}
-                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-6 relative">
-                    <div className="flex items-center justify-between mb-4">
+                <div className="bg-[#1f2937] border border-gray-700 rounded-3xl shadow-2xl p-4 sm:p-6">
+                    {/* Header */}
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-6">
                         <div>
-                            <h2 className="text-xl font-semibold">Generated Videos</h2>
-                            <p className="text-gray-400 text-sm">
+                            <h2 className="text-xl sm:text-2xl font-bold text-white">
+                                Generated Videos
+                            </h2>
+                            <p className="text-gray-400 text-sm mt-1">
                                 AI video output results
                             </p>
                         </div>
-                        <div className="flex gap-3 mb-6">
+
+                        <div className="flex flex-wrap items-center gap-3">
                             <button
                                 onClick={() => setViewMode("generated")}
-                                className={`px-4 py-2 rounded-lg transition ${viewMode === "generated"
-                                    ? "bg-green-600 text-white"
-                                    : "bg-gray-800 text-gray-300"
+                                className={`cursor-pointer px-5 py-2.5 rounded-xl font-medium text-sm transition-all duration-300 hover:scale-105 active:scale-95 ${viewMode === "generated"
+                                    ? "bg-green-600 text-white shadow-lg shadow-green-600/30"
+                                    : "bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700"
                                     }`}
                             >
                                 Generated Videos
@@ -432,10 +476,9 @@ function VideoGenerate() {
                             <button
                                 onClick={() => setViewMode("merged")}
                                 disabled={!mergedVideo}
-                                className={`px-4 py-2 rounded-lg transition ${viewMode === "merged"
-                                    ? "bg-green-600 text-white"
-                                    : "bg-gray-800 text-gray-300"
-                                    } ${!mergedVideo ? "opacity-50 cursor-not-allowed" : ""
+                                className={`cursor-pointer px-5 py-2.5 rounded-xl font-medium text-sm transition-all duration-300 hover:scale-105 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${viewMode === "merged"
+                                    ? "bg-green-600 text-white shadow-lg shadow-green-600/30"
+                                    : "bg-gray-800 text-gray-300 hover:bg-gray-700 border border-gray-700"
                                     }`}
                             >
                                 Merged Video
@@ -443,56 +486,101 @@ function VideoGenerate() {
                         </div>
 
                         {videoGenerate?.length > 0 && (
-                            <span className="bg-green-500 text-black px-4 py-1 rounded-full text-sm font-semibold">
-                                {videoGenerate.length} videos
+                            <span className="self-start lg:self-auto bg-green-500 text-black px-4 py-1.5 rounded-full text-sm font-semibold whitespace-nowrap">
+                                {videoGenerate.length} Videos
                             </span>
                         )}
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-h-[60vh] overflow-auto pr-2 scrollbar-2 scrollbar-track-gray-800 scrollbar-thumb-gray-600">
+                    {/* Content */}
+                    <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+                        {/* Videos */}
+                        <div className="xl:col-span-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 gap-5 max-h-[65vh] overflow-y-auto pr-2 scrollbar-thin scrollbar-track-gray-800 scrollbar-thumb-gray-600 relative">
 
-                        {videoGenerate?.length === 0 && (
-                            <p className="text-gray-500 text-sm absolute top-1/2 left-1/2 transform translate-x-[-50%] translate-y-[-50%] w-fit">
-                                No videos generated yet
-                            </p>
-                        )}
+                                {videoGenerate?.length === 0 && (
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <p className="text-gray-500 text-base">
+                                            No videos generated yet.
+                                        </p>
+                                    </div>
+                                )}
 
-                        {viewMode === "generated" && videoGenerate?.map((video: string, index: number) => (
-                            <div
-                                key={index}
-                                onClick={() => setSelectedVideo(video)}
-                                className="cursor-pointer rounded-2xl overflow-hidden border border-gray-700 hover:border-green-500 transition"
-                            >
-                                <video
-                                    src={video}
-                                    className="w-full h-64 object-cover"
-                                />
+                                {viewMode === "generated" &&
+                                    videoGenerate?.map((video: string, index: number) => (
+                                        <div
+                                            key={index}
+                                            onClick={() => setSelectedVideo(video)}
+                                            className={`relative cursor-pointer overflow-hidden rounded-2xl border transition-all duration-300 ${selectedVideo === video
+                                                ? "border-green-500 ring-2 ring-green-500"
+                                                : "border-gray-700 hover:border-green-500"
+                                                }`}
+                                        >
+                                            <video
+                                                src={video}
+                                                className="w-full h-56 sm:h-64 object-cover"
+                                                muted
+                                            />
+
+                                            {/* Audio Button */}
+                                            {audioList[index] && (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedAudio(audioList[index]);
+                                                    }}
+                                                    className="absolute top-3 right-3 cursor-pointer bg-black/60 hover:bg-green-600 text-white p-2 rounded-full transition-all duration-300"
+                                                >
+                                                    🎵
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+
+                                {viewMode === "merged" && mergedVideo && (
+                                    <div className="col-span-full">
+                                        <video
+                                            src={mergedVideo}
+                                            controls
+                                            autoPlay
+                                            className="w-full rounded-2xl h-[400px] object-cover border border-gray-700"
+                                        />
+                                    </div>
+                                )}
                             </div>
-                        ))}
-
-                        {viewMode === "merged" && (
-                            <video src={mergedVideo} controls autoPlay className="w-full h-64 object-cover" />
-                        )}
-
-                        <div className="space-y-4">
-                            {audioList.map((audio: any) => (
-                                <div
-                                    key={audio.id}
-                                    className="border rounded-lg p-4 bg-gray-100"
-                                >
-                                    <p className="font-semibold">
-                                        Scene {audio.id}
-                                    </p>
-
-                                    <p className="text-sm text-gray-600 mb-2">
-                                        {audio.text}
-                                    </p>
-
-                                    <audio controls src={audio.url} className="w-full" />
-                                </div>
-                            ))}
                         </div>
 
+                        {/* Audio List */}
+                        {selectedAudio && (
+                            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+                                <div className="w-[90%] max-w-md rounded-2xl bg-gray-900 border border-gray-700 p-6 shadow-2xl">
+
+                                    <div className="flex items-center justify-between mb-4">
+                                        <h2 className="text-xl font-semibold text-white">
+                                            Scene {selectedAudio.id} Audio
+                                        </h2>
+
+                                        <button
+                                            onClick={() => setSelectedAudio(null)}
+                                            className="cursor-pointer text-gray-400 hover:text-red-400 text-2xl"
+                                        >
+                                            ✕
+                                        </button>
+                                    </div>
+
+                                    <p className="text-gray-400 mb-4">
+                                        {selectedAudio.text}
+                                    </p>
+
+                                    <audio
+                                        controls
+                                        autoPlay
+                                        src={selectedAudio.url}
+                                        className="w-full cursor-pointer"
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

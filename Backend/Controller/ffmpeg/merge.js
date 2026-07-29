@@ -18,7 +18,7 @@ export function mergeAudioVideo(videoPath, audioPath, output) {
         "-crf 18",
         "-c:a aac",
         "-b:a 192k",
-        "-shortest",       // stop at the shorter of video/audio
+        // "-shortest",       // stop at the shorter of video/audio
         "-movflags +faststart"
       ])
       .output(output)
@@ -45,12 +45,24 @@ export function mergeVideos(videoPaths, output) {
     const command = ffmpeg();
     videoPaths.forEach(video => command.input(video));
 
-    const filter =
-      videoPaths.map((_, index) => `[${index}:v][${index}:a]`).join("") +
-      `concat=n=${videoPaths.length}:v=1:a=1[v][a]`;
+    const filter = [];
+
+    videoPaths.forEach((_, index) => {
+      filter.push(`[${index}:v]setpts=PTS-STARTPTS[v${index}]`);
+    });
+
+    filter.push(
+      `[v0][v1]xfade=transition=fade:duration=2:offset=5[v]`
+    );
+
+    filter.push(
+      `[0:a][1:a]concat=n=2:v=0:a=1[a]`
+    );
+
+    console.log("FILTER:", filter);
 
     command
-      .complexFilter([filter])
+      .complexFilter(filter)
       .outputOptions([
         "-map [v]",
         "-map [a]",

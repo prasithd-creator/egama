@@ -1,8 +1,8 @@
-import axios from "axios";
-import fixJson from "./jsonFix.ts";
+
 import progressStore from "../../utils/OllamaProgressStore.js";
 import ImagePrompt from "../../Models/imagePrompt.ts";
 import runningJobs from "../../utils/jobManager.js";
+import { runOllamaJsonJob } from "../../utils/OllamaJsonRunner.js";
 
 const buildMessages = ({ text, webContent, scene }) => ([
     {
@@ -120,14 +120,32 @@ const buildMessages = ({ text, webContent, scene }) => ([
     }
 ]);
 
+// Helper functions for parsing responses
+const extractImagePromptResult = (parsed) => {
+    let result = parsed?.image_prompts ?? parsed;
+    if (Array.isArray(result)) {
+        result = result[0];
+    }
+    return result;
+};
+
+// Helper functions for parsing responses
+const isValidImagePrompt = (parsed) => {
+    const result = extractImagePromptResult(parsed);
+    return (
+        !!result &&
+        Object.keys(result).length > 0 &&
+        typeof result.prompt === "string" &&
+        result.prompt.trim().length > 0
+    );
+};
+
+// Main function for generating prompt
 const ollama = async (req, res) => {
     const jobId = Date.now().toString();
     const controller = new AbortController();
     runningJobs.set(jobId, controller);
 
-    // Track any in-flight reader so an abort event can cancel it immediately,
-    // instead of waiting for the next poll of controller.signal.aborted.
-    // This is what actually closes the socket to Ollama and stops generation.
     let activeReader = null;
 
     const onAbort = () => {
@@ -163,289 +181,61 @@ const ollama = async (req, res) => {
             throw new Error("Invalid scenes payload: missing screenplay.scenes / screenplay.scene_count");
         }
 
-        const MAX_RETRIES = 3;
-        const estimatedCharsPerScene = 2000;
-
+        const estimatedCharsPerScene = 1000;
         const overallStartTime = Date.now();
-        let overallCharacters = 0; // cumulative chars across ALL scenes so far — used only for display
 
-        // Generates the image prompt for ONE scene, retrying up to MAX_RETRIES
-        const generateOneScenePrompt = async (scene, retry = 0) => {
-            if (controller.signal.aborted) {
-                throw new DOMException("Generation cancelled", "AbortError");
-            }
+        let completedCharacters = 0;
 
+    
+        // Generates the image prompt for ONE scene
+        const generateOneScenePrompt = async (scene) => {
             const messages = buildMessages({ text, webContent, scene });
+            const sceneWeight = 100 / totalScenes;
+            const completedScenes = scene.scene_number - 1;
 
-            // FIX: per-scene counter, reset fresh on every attempt (including retries).
-            // This is what drives the within-scene progress fraction — it must NOT
-            // carry over characters from previous scenes, or the fraction saturates
-            // instantly on every scene after the first and the bar appears frozen.
-            let sceneCharacters = 0;
+            let lastSceneCharacters = 0;
 
-            const response = await fetch("http://127.0.0.1:11434/api/chat", {
-                method: "POST",
-                signal: controller.signal,
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    model: "llama3.1:8b",
-                    stream: true,
-                    format: "json",
-                    messages,
-                    options: {
-                        temperature: 0.7,
-                        num_predict: 12000
-                    }
-                })
+            const sceneProgressAdapter = {
+                set(_id, data) {
+                    lastSceneCharacters = data.characters ?? lastSceneCharacters;
+
+                    const currentSceneProgress = (Math.min(data.progress, 99.9) / 100) * sceneWeight;
+                    const progress = Math.min(completedScenes * sceneWeight + currentSceneProgress, 99.9);
+
+                    progressStore.set(jobId, {
+                        progress: Number(progress.toFixed(1)),
+                        characters: completedCharacters + lastSceneCharacters,
+                        scenes: completedScenes,
+                        elapsed: data.elapsed,
+                        remaining: null,
+                        status: "running"
+                    });
+                }
+            };
+
+            const parsedResponse = await runOllamaJsonJob({
+                jobId,
+                controller,
+                progressStore: sceneProgressAdapter,
+                buildMessages: () => messages,
+                model: "llama3.1:8b",
+                estimatedChars: estimatedCharsPerScene,
+                maxRetries: 3,
+                isValid: isValidImagePrompt,
+                overallStartTime,
+                onReaderCreated: (reader) => {
+                    activeReader = reader;
+                }
             });
 
-            if (!response.ok) throw new Error("Failed to generate the image Prompt");
+            completedCharacters += lastSceneCharacters;
 
-            const reader = response.body.getReader();
-            activeReader = reader;
-            const decoder = new TextDecoder();
-
-            let raw = "";
-            let buffer = "";
-
-            try {
-                // stream the response
-                while (true) {
-                    if (controller.signal.aborted) {
-                        console.log(`Job ${jobId}: aborted — cancelling reader and stopping stream`);
-                        await reader.cancel().catch(() => { });
-                        throw new DOMException("Generation cancelled", "AbortError");
-                    }
-
-                    // read the next chunk
-                    const { value, done } = await reader.read();
-
-                    if (done) break;
-                    buffer += decoder.decode(value, { stream: true });
-
-                    const lines = buffer.split("\n");
-                    buffer = lines.pop() || "";
-
-                    for (const line of lines) {
-                        if (!line.trim()) continue;
-
-                        try {
-                            const json = JSON.parse(line);
-
-                            if (json.message?.content) {
-                                raw += json.message.content;
-                                sceneCharacters += json.message.content.length;   // per-scene, resets each attempt
-                                overallCharacters += json.message.content.length; // running total, for display only
-
-                                const elapsed = (Date.now() - overallStartTime) / 1000;
-                                const completedScenes = scene.scene_number - 1;
-
-                                const sceneWeight = 100 / totalScenes;
-
-                                // progress inside current scene — driven by sceneCharacters, not overallCharacters
-                                const currentSceneProgress =
-                                    Math.min(
-                                        sceneCharacters / estimatedCharsPerScene,
-                                        0.99
-                                    ) * sceneWeight;
-
-                                let progress =
-                                    (completedScenes * sceneWeight) +
-                                    currentSceneProgress;
-
-                                progress = Math.min(progress, 99.9);
-
-                                const estimatedTotal = progress > 0 ? elapsed / (progress / 100) : 0;
-                                const remaining = estimatedTotal - elapsed;
-
-                                progressStore.set(jobId, {
-                                    progress: Number(progress.toFixed(1)),
-                                    characters: overallCharacters,
-                                    scenes: completedScenes,
-                                    elapsed: Number(elapsed.toFixed(1)),
-                                    remaining: remaining > 0 ? Number(remaining.toFixed(1)) : null,
-                                    status: "running"
-                                });
-                            }
-                        } catch {
-                            // Ignore incomplete JSON line
-                        }
-                    }
-                }
-            } finally {
-                activeReader = null;
-            }
-
-            // No response received from Ollama
-            if (!raw || raw.trim().length === 0) {
-                if (controller.signal.aborted) {
-                    throw new DOMException("Generation cancelled", "AbortError");
-                }
-
-                if (retry < MAX_RETRIES) {
-                    console.log(
-                        `Scene ${scene.scene_number}: Empty response from Ollama. Retrying ${retry + 1}/${MAX_RETRIES}...`
-                    );
-
-                    return generateOneScenePrompt(scene, retry + 1);
-                }
-
-                throw new Error(
-                    `Scene ${scene.scene_number}: Ollama returned an empty response after ${MAX_RETRIES} retries.`
-                );
-            }
-
-            let cleanJson = raw
-                .replace(/```json/g, "")
-                .replace(/```/g, "")
-                .trim();
-
-            const start = cleanJson.indexOf("{");
-            const end = cleanJson.lastIndexOf("}");
-
-            if (start === -1 || end === -1) {
-                if (controller.signal.aborted) {
-                    throw new DOMException("Generation cancelled", "AbortError");
-                }
-
-                console.log(`Scene ${scene.scene_number}: NO JSON OBJECT FOUND. Raw output was:`);
-                console.log(cleanJson);
-
-                if (retry < MAX_RETRIES) {
-                    console.log(
-                        `Scene ${scene.scene_number}: No JSON object found. Retrying ${retry + 1}/${MAX_RETRIES}...`
-                    );
-
-                    messages.push({
-                        role: "user",
-                        content: `
-                                Previous response did not contain a JSON object at all.
-
-                                Return ONLY one JSON object, nothing else:
-
-                                {
-                                "scene_number": ${scene.scene_number},
-                                "prompt": "",
-                                "style": "",
-                                "negative_prompt": "",
-                                "ltx_settings": ""
-                                }
-`
-                    });
-
-                    return generateOneScenePrompt(scene, retry + 1);
-                }
-
-                throw new Error(
-                    `Scene ${scene.scene_number}: No JSON object found after ${MAX_RETRIES} retries.`
-                );
-            }
-
-            cleanJson = cleanJson.substring(start, end + 1);
-            cleanJson = cleanJson.replace(/[\u0000-\u001F]+/g, " ");
-            cleanJson = fixJson(cleanJson);
-
-            let parsed;
-
-            try {
-                parsed = JSON.parse(cleanJson);
-            } catch (err) {
-                if (controller.signal.aborted) {
-                    throw new DOMException("Generation cancelled", "AbortError");
-                }
-
-                if (retry < MAX_RETRIES) {
-                    console.log(
-                        `Scene ${scene.scene_number}: JSON parse failed. Retrying ${retry + 1}/${MAX_RETRIES}...`
-                    );
-
-                    messages.push({
-                        role: "user",
-                        content: `
-                                Previous response was not valid JSON.
-
-                                Return ONLY one JSON object.
-
-                                {
-                                "scene_number": ${scene.scene_number},
-                                "prompt": "",
-                                "style": "",
-                                "negative_prompt": "",
-                                "ltx_settings": ""
-                                }
-`
-                    });
-
-                    return generateOneScenePrompt(scene, retry + 1);
-                }
-
-                console.log(`Scene ${scene.scene_number}: JSON PARSE FAILED`);
-                console.log(cleanJson);
-                throw err;
-            }
-
-            let result = parsed?.image_prompts ?? parsed;
-
-            if (Array.isArray(result)) {
-                result = result[0];
-            }
-
-            if (
-                !result ||
-                Object.keys(result).length === 0 ||
-                typeof result.prompt !== "string" ||
-                result.prompt.trim().length === 0
-            ) {
-                if (controller.signal.aborted) {
-                    throw new DOMException("Generation cancelled", "AbortError");
-                }
-
-                if (retry < MAX_RETRIES) {
-                    console.log(
-                        `Scene ${scene.scene_number}: Empty prompt returned. Retrying ${retry + 1}/${MAX_RETRIES}...`
-                    );
-
-                    messages.push({
-                        role: "user",
-                        content: `
-                                You returned an empty object or missing prompt.
-
-                                Regenerate ONLY this JSON:
-
-                                {
-                                "scene_number": ${scene.scene_number},
-                                "prompt": "",
-                                "style": "",
-                                "negative_prompt": "",
-                                "ltx_settings": ""
-                                }
-
-                                Do not return:
-                                {}
-                                []
-                                {"image_prompts":[]}
-`
-                    });
-
-                    return generateOneScenePrompt(scene, retry + 1);
-                }
-
-                console.log(`Scene ${scene.scene_number}: EMPTY RESPONSE`);
-                console.log(cleanJson);
-
-                throw new Error(
-                    `Scene ${scene.scene_number}: Prompt missing after ${MAX_RETRIES} retries.`
-                );
-            }
-
-            return result;
+            return extractImagePromptResult(parsedResponse);
         };
 
         const imagePrompts = [];
 
         for (let i = 0; i < sceneList.length; i++) {
-
-            // cancel the generation
             if (controller.signal.aborted) {
                 throw new DOMException("Generation cancelled", "AbortError");
             }
@@ -461,7 +251,7 @@ const ollama = async (req, res) => {
 
             progressStore.set(jobId, {
                 progress: Number((((i + 1) / totalScenes) * 100).toFixed(1)),
-                characters: overallCharacters,
+                characters: completedCharacters,
                 scenes: i + 1,
                 elapsed: Number(elapsed.toFixed(1)),
                 remaining: null,
@@ -475,7 +265,7 @@ const ollama = async (req, res) => {
 
         progressStore.set(jobId, {
             progress: 100,
-            characters: overallCharacters,
+            characters: completedCharacters,
             scenes: totalScenes,
             elapsed: Number(((Date.now() - overallStartTime) / 1000).toFixed(1)),
             remaining: null,
@@ -487,37 +277,23 @@ const ollama = async (req, res) => {
         const brand = scenes.screenplay.brand_name;
         const topic = scenes.screenplay.topic;
 
-        let imagePrompt = await ImagePrompt.findOne({
-            category
-        });
+        let imagePrompt = await ImagePrompt.findOne({ category });
 
         if (!imagePrompt) {
-            imagePrompt = new ImagePrompt({
-                category,
-                brands: []
-            });
+            imagePrompt = new ImagePrompt({ category, brands: [] });
         }
 
-        let brandFolder = imagePrompt.brands.find(
-            (item) => item.name === brand
-        );
+        let brandFolder = imagePrompt.brands.find((item) => item.name === brand);
 
         if (!brandFolder) {
-            brandFolder = {
-                name: brand,
-                topics: []
-            };
-
+            brandFolder = { name: brand, topics: [] };
             imagePrompt.brands.push(brandFolder);
         }
 
         let topicsFolder = brandFolder.topics.find(t => t.name === topic);
 
         if (!topicsFolder) {
-            brandFolder.topics.push({
-                name: topic,
-                image_prompts: cleanImagePrompts
-            });
+            brandFolder.topics.push({ name: topic, image_prompts: cleanImagePrompts });
         } else {
             topicsFolder.image_prompts = cleanImagePrompts;
         }
@@ -542,7 +318,7 @@ const ollama = async (req, res) => {
 
         if (!res.headersSent) {
             return res.status(wasCancelled ? 200 : 500).json({
-                success: !wasCancelled ? false : true,
+                success: wasCancelled,
                 cancelled: wasCancelled,
                 error: wasCancelled ? undefined : err.message
             });

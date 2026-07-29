@@ -542,7 +542,7 @@ function Images() {
             setVideoPrompt(videoPromptResult);
 
             const uploaded = await uploadComfy(data);
-            navigate("/videos", { state: {scenes: scenes, imagePrompts: imgPromptState, videoPrompt: videoPromptResult, image: data, comfyImage: uploaded } });
+            navigate("/videos", { state: { scenes: scenes, imagePrompts: imgPromptState, videoPrompt: videoPromptResult, image: data, comfyImage: uploaded } });
         } catch (error) {
             console.log(error);
         } finally {
@@ -674,7 +674,12 @@ function Images() {
                 `${backendUrl}/api/reGenerateOllamaPrompt`,
                 {
                     prompt: imagePrompt.prompt,
-                    changes: change
+                    changes: change,
+                    category: allStates?.scenes?.screenplay?.company_name,
+                    brand: allStates?.scenes?.screenplay?.brand_name,
+                    topic: allStates?.requirements,
+                    sceneNumber: imagePrompt.scene_number,
+                    generation_type: "image_prompts"
                 }
             );
 
@@ -721,12 +726,12 @@ function Images() {
             );
 
         } finally {
-
+            setEditIndex(null);
             activeGenerationRef.current = false;
             jobMetaRef.current = null;
             setGenerateLoading(false);
             setJobId(null);
-
+            setPromptChange("");
         }
     };
 

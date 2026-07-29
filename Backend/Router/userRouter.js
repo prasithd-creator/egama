@@ -13,7 +13,6 @@ import { getProgress } from "../Controller/Ollama/Ollama-progress.js";
 import { uploadImages } from "../Controller/UploadDB/uploadImageDB.js";
 import { getMongoData } from "../Controller/UploadDB/getMongoData.js";
 import {cancelGeneration} from "../Controller/cancelController.js";
-import ollamaImageAnalysis from "../Controller/Ollama/OllamaImageAnalysis.js";
 import textToSpeech from "../Controller/LMNT/textToSpeech.js";
 import reGenerateOllamaPrompt from "../Controller/Ollama/ReGenerateOllamaPrompt.js";
 
@@ -36,7 +35,6 @@ userRouter.get("/ollamaProgress/:id", getProgress);
 userRouter.post("/uploadImage/db", uploadImages);
 userRouter.get("/getMongoData", getMongoData);
 userRouter.post("/cancelGeneration", cancelGeneration);
-userRouter.post("/ollamaImageAnalysis", ollamaImageAnalysis);
 userRouter.post("/textToSpeech", textToSpeech);
 userRouter.post("/reGenerateOllamaPrompt", reGenerateOllamaPrompt);
 

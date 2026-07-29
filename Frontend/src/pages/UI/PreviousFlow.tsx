@@ -22,26 +22,48 @@ function PreviousFlow() {
         }
     }, []);
 
-    // openFolders now tracks category ids, openBrands tracks composite "categoryId-brandIndex" keys
-    const [openFolders, setOpenFolders] = useState<number[]>([]);
-    const [openBrands, setOpenBrands] = useState<string[]>([]);
+    // Accordion behavior: only a single folder id and a single brand key can be open at once.
+    const [openFolder, setOpenFolder] = useState<number | null>(() => {
+        const saved = localStorage.getItem("openFolder");
+        return saved ? JSON.parse(saved) : null;
+    });
+    const [openBrand, setOpenBrand] = useState<string | null>(() => {
+        const saved = localStorage.getItem("openBrand");
+        return saved ? JSON.parse(saved) : null;
+    });
+    // Remember which topic was selected so a refresh can land back on it.
+    const [selectedId, setSelectedId] = useState<string | null>(() => {
+        return localStorage.getItem("selectedTopicId");
+    });
 
-    console.log(selected);
+    useEffect(() => {
+        localStorage.setItem("openFolder", JSON.stringify(openFolder));
+    }, [openFolder]);
+
+    useEffect(() => {
+        localStorage.setItem("openBrand", JSON.stringify(openBrand));
+    }, [openBrand]);
+
+    useEffect(() => {
+        if (selectedId) {
+            localStorage.setItem("selectedTopicId", selectedId);
+        }
+    }, [selectedId]);
 
     const toggleFolder = (id: number) => {
-        setOpenFolders((prev) =>
-            prev.includes(id)
-                ? prev.filter((folderId) => folderId !== id)
-                : [...prev, id]
-        );
+        setOpenFolder((prev) => {
+            const next = prev === id ? null : id;
+            // Closing/changing a folder should also close whatever brand was open,
+            // since brands belong to a single folder.
+            if (next !== prev) {
+                setOpenBrand(null);
+            }
+            return next;
+        });
     };
 
     const toggleBrand = (key: string) => {
-        setOpenBrands((prev) =>
-            prev.includes(key)
-                ? prev.filter((k) => k !== key)
-                : [...prev, key]
-        );
+        setOpenBrand((prev) => (prev === key ? null : key));
     };
 
     useEffect(() => {
@@ -62,6 +84,8 @@ function PreviousFlow() {
                         topics: (brand.topics || []).map((topic: any, topicIndex: number) => ({
                             id: `${index}-${brandIndex}-${topicIndex}`,
                             name: topic.name,
+                            folderName: project.category,
+                            brandName: brand.name,
 
                             images: (topic.image_prompts || [])
                                 .filter((img: any) => img.image_url)
@@ -78,9 +102,38 @@ function PreviousFlow() {
                 console.log(projects);
 
                 if (projects.length && projects[0].brands.length && projects[0].brands[0].topics.length) {
-                    setSelected(projects[0].brands[0].topics[0]);
-                    setOpenFolders([projects[0].id]);
-                    setOpenBrands([`${projects[0].id}    -0`]);
+                    // Try to restore the exact previously-selected topic (and its folder/brand)
+                    // from localStorage; fall back to the first topic if nothing matches.
+                    let restoredTopic: any = null;
+                    let restoredFolderId: number | null = null;
+                    let restoredBrandKey: string | null = null;
+
+                    if (selectedId) {
+                        outer:
+                        for (const folder of projects) {
+                            for (const brand of folder.brands) {
+                                const match = brand.topics.find((t: any) => t.id === selectedId);
+                                if (match) {
+                                    restoredTopic = match;
+                                    restoredFolderId = folder.id;
+                                    restoredBrandKey = `${folder.id}-${brand.id}`;
+                                    break outer;
+                                }
+                            }
+                        }
+                    }
+
+                    if (restoredTopic) {
+                        setSelected(restoredTopic);
+                        setOpenFolder(restoredFolderId);
+                        setOpenBrand(restoredBrandKey);
+                    } else {
+                        const firstTopic = projects[0].brands[0].topics[0];
+                        setSelected(firstTopic);
+                        setSelectedId(firstTopic.id);
+                        setOpenFolder(projects[0].id);
+                        setOpenBrand(`${projects[0].id}-0`);
+                    }
                 }
             } catch (error) {
                 console.log(error);
@@ -92,6 +145,10 @@ function PreviousFlow() {
         fetchProjects();
     }, []);
 
+    const selectTopic = (topic: any) => {
+        setSelected(topic);
+        setSelectedId(topic.id);
+    };
 
     const clickEvent = (img: string, index: number) => {
 
@@ -145,13 +202,13 @@ function PreviousFlow() {
                                     onClick={() => toggleFolder(folder.id)}
                                     className="flex items-center gap-2 text-yellow-500 font-semibold w-full cursor-pointer hover:bg-gray-700/40 px-3 py-2 rounded-lg"
                                 >
-                                    {openFolders.includes(folder.id) ? (
+                                    {openFolder === folder.id ? (
                                         <ChevronDown size={18} className="text-yellow-500" />
                                     ) : (
                                         <ChevronRight size={18} className="text-yellow-500" />
                                     )}
 
-                                    {openFolders.includes(folder.id) ? (
+                                    {openFolder === folder.id ? (
                                         <FolderOpen size={24} className="text-yellow-500" />
                                     ) : (
                                         <Folder size={24} />
@@ -164,11 +221,11 @@ function PreviousFlow() {
                                 </button>
 
                                 {/* Brands */}
-                                {openFolders.includes(folder.id) && (
+                                {openFolder === folder.id && (
                                     <div className="ml-4 space-y-2 pr-2 pb-2">
                                         {folder.brands.map((brand: any) => {
                                             const brandKey = `${folder.id}-${brand.id}`;
-                                            const brandOpen = openBrands.includes(brandKey);
+                                            const brandOpen = openBrand === brandKey;
 
                                             return (
                                                 <div key={brandKey}>
@@ -191,7 +248,7 @@ function PreviousFlow() {
                                                             {brand.topics.map((topic: any) => (
                                                                 <button
                                                                     key={topic.id}
-                                                                    onClick={() => setSelected(topic)}
+                                                                    onClick={() => selectTopic(topic)}
                                                                     className={`w-full text-left px-3 py-2 rounded-lg transition cursor-pointer ${selected?.id === topic.id
                                                                         ? "bg-gradient-to-r from-green-500 to-emerald-600"
                                                                         : "hover:bg-gray-700"
@@ -222,8 +279,22 @@ function PreviousFlow() {
                     <div className="text-gray-500">Select a project</div>
                 ) : (
                     <>
-                        <h2 className="text-2xl font-semibold mb-6">
-                            {selected.name.charAt(0).toUpperCase() + selected.name.slice(1)}
+                        <h2 className="text-2xl font-semibold mb-6 flex items-center gap-2 flex-wrap">
+                            <span className="text-yellow-500 text-xl">
+                                {selected.folderName?.charAt(0).toUpperCase() + selected.folderName?.slice(1)}
+                            </span>
+                            <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "gray" }}>
+                                arrow_forward_ios
+                            </span>
+                            <span className="text-blue-400 text-xl">
+                                {selected.brandName?.charAt(0).toUpperCase() + selected.brandName?.slice(1)}
+                            </span>
+                            <span className="material-symbols-outlined" style={{ fontSize: "16px", color: "gray" }}>
+                                arrow_forward_ios
+                            </span>
+                            <span>
+                                {selected.name.charAt(0).toUpperCase() + selected.name.slice(1)}
+                            </span>
                         </h2>
 
                         {/* Images */}
@@ -237,8 +308,8 @@ function PreviousFlow() {
                                     {
                                         state: {
                                             data: { image_prompts: selected.imagePrompt },
-                                            requirements: responseData.metadata.requirements,
-                                            webContent: responseData.markdown,
+                                            requirements: responseData?.metadata?.requirements,
+                                            webContent: responseData?.markdown,
                                             from: location.pathname,
                                             scenes: selected.scenes,
                                             uploaded: selected.images
@@ -279,10 +350,28 @@ function PreviousFlow() {
                         </div>
 
                         {/* Videos */}
-                        <h3 className="flex items-center gap-2 text-lg mb-4">
-                            <Play size={20} />
-                            Videos
-                        </h3>
+                        <div className="flex justify-between">
+                            <h3 className="flex items-center gap-2 text-lg mb-4">
+                                <Play size={20} />
+                                Videos
+                            </h3>
+
+                            {selected.videosPrompt.length > 0 && <button className="px-2 bg-[image:var(--gradient-primary)] py-2 rounded-lg mb-5 hover:bg-[image:var(--gradient-glow)] cursor-pointer" onClick={() =>
+                                navigate(`/videos`,
+                                    {
+                                        state: {
+                                            imagePrompts: selected.imagePrompt,
+                                            requirements: responseData?.metadata?.requirements,
+                                            webContent: responseData?.markdown,
+                                            from: location.pathname,
+                                            scenes: selected.scenes,
+                                            image: selected.images,
+                                            videoPrompt: { data: selected.videosPrompt }
+                                        },
+                                    })
+                            }
+                            >Videos Flow</button>}
+                        </div>
 
                         <div className="grid grid-cols-2 gap-5">
                             {selected.videos.length ? (
