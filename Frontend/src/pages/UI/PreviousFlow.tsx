@@ -169,7 +169,7 @@ function PreviousFlow() {
     }
 
     return (
-        <div className="h-screen bg-[#111827] text-white flex">
+        <div className="h-screen bg-[#111827] text-white flex w-full">
 
             {/* Sidebar */}
             <div className="w-72 border-r border-gray-800 overflow-y-auto scrollbar-thumb-gray-600">

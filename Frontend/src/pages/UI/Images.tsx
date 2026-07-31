@@ -737,13 +737,18 @@ function Images() {
 
 
     return (
-        <div className="min-h-screen text-white p-6">
+        <div className="min-h-screen text-white p-6 w-full">
 
             {/* Header */}
             <div className={`flex items-center justify-between ${loading ? "mb-2" : "mb-10"}`}>
-                <div>
-                    <button onClick={() => navigate(allStates?.from || "/", { replace: true })} className="cursor-pointer px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition-all duration-200 ease-in-out">Back</button>
-                </div>
+              <button
+                    onClick={() => navigate(allStates?.from || "/", { replace: true })}
+                    className="h-10 w-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
+                >
+                    <span className="material-symbols-outlined text-gray-300">
+                        arrow_back_ios_new
+                    </span>
+                </button>
                 <div>
                     <h1 className="text-3xl font-bold">Image Prompts</h1>
                     <p className="text-gray-400 text-sm">

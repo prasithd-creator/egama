@@ -1,17 +1,26 @@
 import { useState, useEffect, useContext, useRef } from "react";
 import { Link } from "lucide-react";
-import logo from "../../assets/egama_logo.png"
 import axios from "axios";
 import { AppContext } from "../../Context/createContent";
 import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import TOPIC_SCENE_CONFIG from "../../assets/TopicScene";
 import OllamaProgress from "./OllamaProgress";
+import SideBar from "../../Component/SideBar";
 
 
 export default function ChatGPTUrlScreen() {
     const navigate = useNavigate();
-    const [url, setUrl] = useState<string>("");
+    const [url, setUrl] = useState<string>(() => {
+        const data = localStorage.getItem("responseData");
+        if (!data) return "";
+
+        try {
+            return JSON.parse(data).metadata.url || "";
+        } catch (e) {
+            return "";
+        }
+    });
     const [submittedUrl, setSubmittedUrl] = useState("");
     const [loading, setLoading] = useState<boolean>(false);
     const stored = localStorage.getItem("responseData");
@@ -420,29 +429,7 @@ export default function ChatGPTUrlScreen() {
 
     return (
 
-        <div className="min-h-screen">
-
-
-            {/* Logo */}
-            <div className="absolute top-6 left-6 flex items-center gap-3">
-                <img
-                    src={logo}
-                    alt="Logo"
-                    className="w-16 object-contain"
-                />
-
-                <div>
-                    <h1 className="text-white text-xl font-bold">
-                        Egama AI
-                    </h1>
-
-                    <p className="text-gray-400 text-sm">
-                        Workflow Dashboard
-                    </p>
-                </div>
-
-            </div>
-            <button onClick={() => navigate("/previousflow")} className="bg-gray-700 text-white px-4 py-2 rounded-lg hover:bg-gray-600 transition duration-300 right-4 top-4  absolute cursor-pointer">Previous Flow</button>
+        <div className="min-h-screen w-full">
 
             {/* Main */}
             <div className="flex items-center justify-center min-h-screen px-4">
@@ -475,14 +462,14 @@ export default function ChatGPTUrlScreen() {
                                     placeholder="Paste your workflow URL..."
                                     value={url}
                                     onChange={(e) => setUrl(e.target.value)}
-                                    className="flex-1 bg-transparent text-white placeholder-gray-500 focus:outline-none py-3"
+                                    className="flex-1 bg-transparent text-white/70 placeholder-gray-500 focus:outline-none py-3"
                                 />
                             </div>
 
                             <button
                                 onClick={handleSubmit}
                                 disabled={loading}
-                                className="bg-[image:var(--gradient-primary)] hover:opacity-90 w-full md:w-auto text-white cursor-pointer px-8 py-4 rounded-2xl font-semibold transition-all disabled:opacity-50 shadow-lg hover:shadow-green-500/30 whitespace-nowrap"
+                                className="bg-(image:--gradient-glow) hover:opacity-90 w-full md:w-auto text-white cursor-pointer px-8 py-4 rounded-2xl font-semibold transition-all disabled:opacity-50 shadow-lg hover:shadow-green-500/30 whitespace-nowrap"
                             >
                                 {loading ? "Sending..." : "Submit URL"}
                             </button>
@@ -490,18 +477,18 @@ export default function ChatGPTUrlScreen() {
                         </div>
 
                         {/* Submitted URL */}
-                        {submittedUrl && (
-                            <div className="mt-6 bg-[#111827] border border-gray-700 rounded-2xl p-5">
+                        {/* {submittedUrl && (
+                                    <div className="mt-6 bg-[#111827] border border-gray-700 rounded-2xl p-5">
 
-                                <p className="text-gray-400 text-sm mb-2">
-                                    Submitted URL
-                                </p>
+                                        <p className="text-gray-400 text-sm mb-2">
+                                            Submitted URL
+                                        </p>
 
-                                <p className="text-green-400 break-all">
-                                    {submittedUrl}
-                                </p>
-                            </div>
-                        )}
+                                        <p className="text-green-400 break-all">
+                                            {submittedUrl}
+                                        </p>
+                                    </div>
+                                )} */}
 
                         {/* Loading */}
                         {loading && (
@@ -526,7 +513,7 @@ export default function ChatGPTUrlScreen() {
 
 
                                     {/* Response Box */}
-                                    <div className="bg-[#111827] border border-gray-700 rounded-2xl overflow-hidden">
+                                    <div className="bg-[#111827] border border-gray-700 rounded-2xl overflow-hidden cursor-pointer" onClick={() => window.open(responseData?.metadata?.url, "_blank")} title={responseData?.metadata?.url}>
                                         {/* Header */}
                                         <div className="flex items-center justify-between px-5 py-4 border-b border-gray-700">
 
@@ -673,9 +660,8 @@ export default function ChatGPTUrlScreen() {
                     </div>
                 )
             }
-
-
         </div>
+
 
     );
 }

@@ -7,6 +7,7 @@ import { useContext } from "react";
 import { AppContext } from "../../Context/createContent";
 import useLMNT from "../../API/LMNT";
 import { sendReGenerateVideoPrompt } from "../../Actions/sendReGenerateVideoPrompt";
+import OllamaProgress from "./OllamaProgress";
 
 const STORAGE_KEY = "videoPageState";
 const JOB_STORAGE_KEY = "imagesPageActiveJob";
@@ -84,22 +85,28 @@ function VideoGenerate() {
     const [progress, setProgress] = useState(0);
     const { voiceModel } = context as any;
     const [audioList, setAudioList] = useState<any>([]);
-    const allStatesRef = useRef<any>(
-        location?.state ??
-        (() => {
-            try {
-                const cached = sessionStorage.getItem(STORAGE_KEY);
-                return cached ? JSON.parse(cached) : null;
-            } catch {
-                return null;
-            }
-        })()
+    const allStatesRef = useRef<any>(location?.state ?? (() => {
+        try {
+            const cached = sessionStorage.getItem(STORAGE_KEY);
+            return cached ? JSON.parse(cached) : null;
+        } catch {
+            return null;
+        }
+    })()
     );
     const allStates = allStatesRef.current;
     const state = allStates as any;
     const [selectedAudio, setSelectedAudio] = useState<any>(null);
     const [editIndex, setEditIndex] = useState<any>(null);
     const [promptChange, setPromptChange] = useState<any>(null);
+    const [elapsed, setElapsed] = useState(0);
+    const [characters, setCharacters] = useState(0);
+    const [generatedScenes, setGeneratedScenes] = useState(0);
+    const [totalScenes, setTotalScenes] = useState<number | null>(null);
+    const [remaining, setRemaining] = useState<number | null>(null);
+    const [generateScenes, setGenerateScenes] = useState<string>("Generate Video Prompt");
+    const [jobId, setJobId] = useState<string | null>(null);
+    const [reGenerationLoading, setRegenerateLoading] = useState<boolean>(false);
     console.log(state);
     console.log(videoPrompt);
     console.log(Array.isArray(videoPrompt));
@@ -309,10 +316,75 @@ function VideoGenerate() {
         }
     };
 
+    const pollOllamaJob = (
+        jobId: string,
+        onProgress: (data: any) => void
+    ): Promise<any> => {
+        return new Promise((resolve, reject) => {
+            const interval = setInterval(async () => {
+                try {
+                    const progressResponse = await axios.get(
+                        `${backendUrl}/api/ollamaProgress/${jobId}`
+                    );
+                    const progressData = progressResponse.data;
+
+                    onProgress(progressData);
+
+                    if (progressData.status === "completed") {
+                        clearInterval(interval);
+                        resolve(progressData.data);
+                    }
+
+                    if (progressData.status === "failed") {
+                        clearInterval(interval);
+                        reject(new Error(progressData.error || "Generation failed"));
+                    }
+
+                    if (progressData.status === "cancelled") {
+                        clearInterval(interval);
+                        reject(new Error("Generation cancelled"));
+                    }
+                } catch (error) {
+                    clearInterval(interval);
+                    reject(error);
+                }
+            }, 1000);
+        });
+    };
+
     const handlePromptChange = async (index: number) => {
         console.log(index);
-       const res = await sendReGenerateVideoPrompt(videoPrompt[index].prompt, promptChange, allStates);
-       console.log(res);
+        try {
+            setRegenerateLoading(true);
+            const res = await sendReGenerateVideoPrompt(videoPrompt[index].prompt, promptChange, allStates, backendUrl, videoPrompt[index].scene_number);
+
+            if (!res.success) {
+                throw new Error("Failed to re-generate video prompt");
+            }
+
+            const result = await pollOllamaJob(res.jobId, (data: any) => {
+                setProgress(data.progress);
+            });
+
+            setVideoPrompt((prev: any[]) => {
+                const updated = [...prev];
+
+                updated[index] = {
+                    ...updated[index],
+                    prompt: result.prompt,
+                };
+
+                return updated;
+            })
+
+            console.log(result);
+        } catch (error) {
+            console.error(error);
+        } finally {
+            setRegenerateLoading(false);
+        }
+
+
     }
 
     return (
@@ -604,6 +676,32 @@ function VideoGenerate() {
                     />
                 </div>
             )}
+
+            {/* resopnse Loading */}
+            {
+                reGenerationLoading && (
+                    <div className="fixed z-50 inset-0 bg-black/30 backdrop-blur-sm">
+
+                        <div className="flex flex-col items-center justify-center w-full h-full gap-6">
+
+
+                            <OllamaProgress
+                                loading={reGenerationLoading}
+                                progress={progress}
+                                remaining={remaining}
+                                elapsed={elapsed}
+                                scenes={generatedScenes}
+                                totalScenes={videoPrompt?.length}
+                                characters={characters}
+                                text={generateScenes}
+                            />
+
+
+                        </div>
+
+                    </div>
+                )
+            }
 
         </div>
     );
