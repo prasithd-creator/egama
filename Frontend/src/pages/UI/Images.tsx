@@ -741,7 +741,7 @@ function Images() {
 
             {/* Header */}
             <div className={`flex items-center justify-between ${loading ? "mb-2" : "mb-10"}`}>
-              <button
+                <button
                     onClick={() => navigate(allStates?.from || "/", { replace: true })}
                     className="h-10 w-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
                 >
@@ -977,7 +977,6 @@ function Images() {
                     <div className="fixed z-50 inset-0 bg-black/30 backdrop-blur-sm">
 
                         <div className="flex flex-col items-center justify-center w-full h-full gap-6">
-
 
                             <OllamaProgress
                                 loading={generateLoading}
