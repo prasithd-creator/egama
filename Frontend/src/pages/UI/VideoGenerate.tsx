@@ -383,8 +383,6 @@ function VideoGenerate() {
         } finally {
             setRegenerateLoading(false);
         }
-
-
     }
 
     return (
