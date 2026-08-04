@@ -16,9 +16,10 @@ export function mergeAudioVideo(videoPath, audioPath, output) {
         "-c:v libx264",
         "-preset medium",
         "-crf 18",
+        "-af apad",
         "-c:a aac",
         "-b:a 192k",
-        // "-shortest",       // stop at the shorter of video/audio
+        "-shortest",       // stop at the shorter of video/audio
         "-movflags +faststart"
       ])
       .output(output)
@@ -52,12 +53,10 @@ export function mergeVideos(videoPaths, output) {
     });
 
     filter.push(
-      `[v0][v1]xfade=transition=fade:duration=2:offset=5[v]`
+      `[v0][v1]xfade=transition=fade:duration=2:offset=6[v]`
     );
 
-    filter.push(
-      `[0:a][1:a]concat=n=2:v=0:a=1[a]`
-    );
+    filter.push(`[0:a][1:a]acrossfade=d=2[a]`);
 
     console.log("FILTER:", filter);
 

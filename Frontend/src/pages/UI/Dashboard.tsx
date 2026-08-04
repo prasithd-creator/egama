@@ -608,7 +608,7 @@ export default function ChatGPTUrlScreen() {
                                                 name="answer"
                                                 value="brandon"
                                                 className="w-5 h-5 accent-blue-400 cursor-pointer bg-gray-800 border-gray-600"
-                                                onClick={() => setVoiceModel("Brandon")}
+                                                onClick={() => setVoiceModel("brandon")}
                                             />
                                             <span>Male</span>
                                         </label>
@@ -638,10 +638,7 @@ export default function ChatGPTUrlScreen() {
             {
                 (RequirementLoading || analyzeLoading) && (
                     <div className="fixed z-50 inset-0 bg-black/30 backdrop-blur-sm">
-
                         <div className="flex flex-col items-center justify-center w-full h-full gap-6">
-
-
                             <OllamaProgress
                                 loading={RequirementLoading || analyzeLoading}
                                 progress={progress}
@@ -653,10 +650,7 @@ export default function ChatGPTUrlScreen() {
                                 text={generateScenes}
                                 stage={stage}
                             />
-
-
                         </div>
-
                     </div>
                 )
             }

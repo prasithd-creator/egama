@@ -393,10 +393,12 @@ function VideoGenerate() {
 
             <div className="flex items-center justify-between mb-10">
                 <button
-                    onClick={() => navigate(-1)}
-                    className="px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition cursor-pointer"
+                    onClick={() => navigate(allStates?.from || "/")}
+                    className="h-10 w-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"
                 >
-                    Back
+                    <span className="material-symbols-outlined text-gray-300">
+                        arrow_back_ios_new
+                    </span>
                 </button>
 
                 <div className="text-center">

@@ -239,7 +239,7 @@ function PreviousFlow() {
                                                             <ChevronRight size={14} className="text-blue-400" />
                                                         )}
                                                         <Tag size={16} />
-                                                        <span className="truncate">{brand.name}</span>
+                                                        <span className="truncate" onDoubleClick={() => console.log(brand.name)}>{brand.name}</span>
                                                     </button>
 
                                                     {/* Topics */}
@@ -303,7 +303,7 @@ function PreviousFlow() {
                                 <ImageIcon size={20} />
                                 Images
                             </h3>
-                            {selected.imagePrompt.length > 0 && <button className="px-2 bg-[image:var(--gradient-primary)] py-2 rounded-lg mb-5 hover:bg-[image:var(--gradient-glow)] cursor-pointer" onClick={() =>
+                            {selected.imagePrompt.length > 0 && <button className="px-4 bg-[image:var(--gradient-primary)] py-2 rounded-lg mb-5 hover:bg-[image:var(--gradient-glow)] cursor-pointer transition-all duration-300" onClick={() =>
                                 navigate(`/images`,
                                     {
                                         state: {
@@ -356,7 +356,7 @@ function PreviousFlow() {
                                 Videos
                             </h3>
 
-                            {selected.videosPrompt.length > 0 && <button className="px-2 bg-[image:var(--gradient-primary)] py-2 rounded-lg mb-5 hover:bg-[image:var(--gradient-glow)] cursor-pointer" onClick={() =>
+                            {selected.videosPrompt.length > 0 && <button className="px-4 bg-[image:var(--gradient-primary)] py-2 rounded-lg mb-5 hover:bg-[image:var(--gradient-glow)] cursor-pointer" onClick={() =>
                                 navigate(`/videos`,
                                     {
                                         state: {
