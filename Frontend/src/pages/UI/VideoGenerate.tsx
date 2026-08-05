@@ -107,6 +107,8 @@ function VideoGenerate() {
     const [generateScenes, setGenerateScenes] = useState<string>("Generate Video Prompt");
     const [jobId, setJobId] = useState<string | null>(null);
     const [reGenerationLoading, setRegenerateLoading] = useState<boolean>(false);
+    const [generationLoading, setGenerationLoading] = useState<boolean>(false);
+    const [loadingName, setLoadingName] = useState<string | null>("Loading...");
     console.log(state);
     console.log(videoPrompt);
     console.log(Array.isArray(videoPrompt));
@@ -271,6 +273,8 @@ function VideoGenerate() {
         if (!voiceModel) {
             return toast.error("Please select a voice model");
         }
+        setGenerationLoading(true);
+        setLoadingName("Audio Generation....");
 
         try {
             const segments = videoPrompt
@@ -293,15 +297,19 @@ function VideoGenerate() {
             }
 
             setAudioList(results as any);
-            toast.success("All audio files generated successfully!");
+            await mergeVideos(results);
+            toast.success("Audio and video merge completed successfully!");
+            setGenerationLoading(false);
         } catch (error) {
             console.error(error);
             toast.error("Audio generation failed");
         }
     };
 
-    const mergeVideos = async () => {
+    const mergeVideos = async (audioList: any[]) => {
         try {
+            setGenerationLoading(true);
+            setLoadingName("Video Merging....");
             const res = await axios.post(`${backendUrl}/api/mainMerge`, {
                 video: videoGenerate,
                 audio: audioList.map((a: any) => ({ base64: a.base64 })), // send base64, not blob url
@@ -313,6 +321,8 @@ function VideoGenerate() {
             }
         } catch (error) {
             console.log(error);
+        } finally {
+            setGenerationLoading(false);
         }
     };
 
@@ -387,7 +397,7 @@ function VideoGenerate() {
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-black text-white p-6">
-            <button onClick={mergeVideos} className="px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition cursor-pointer">Merge</button>
+            {/* <button onClick={mergeVideos} className="px-6 py-2 bg-gray-800 rounded-full hover:bg-gray-700 transition cursor-pointer">Merge</button> */}
 
             <div className="flex items-center justify-between mb-10">
                 <button
@@ -398,6 +408,11 @@ function VideoGenerate() {
                         arrow_back_ios_new
                     </span>
                 </button>
+
+                {generationLoading && <div className="flex items-center gap-2">
+                    <div className="w-10 h-10 border-4 border-gray-700 border-t-transparent rounded-full animate-[spin_1s_linear_infinite]"></div>
+                    <span className="text-sm text-gray-400">{loadingName || "Generating..."}</span>
+                </div>}
 
                 <div className="text-center">
                     <h1 className="text-3xl font-bold">Video Prompts</h1>
