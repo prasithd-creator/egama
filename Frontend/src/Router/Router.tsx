@@ -4,7 +4,6 @@ import Images from "../pages/UI/Images";
 import VideoGenerate from "../pages/UI/VideoGenerate";
 import PreviousFlow from "../pages/UI/PreviousFlow";
 import Dashboard from "../pages/UI/Dashboard";
-import MainDashboard from "../pages/UI/MainDashboard";
 
 const router = createBrowserRouter([
     {
@@ -29,9 +28,6 @@ const router = createBrowserRouter([
             }, {
                 path: "/previousflow/images",
                 element: <Images />,
-            }, {
-                path: "/maindashboard",
-                element: <MainDashboard />,
             }
         ],
     },

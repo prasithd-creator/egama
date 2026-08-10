@@ -20,7 +20,7 @@ function SideBar() {
     return (
         <>
             {/* Logo */}
-            <div className="flex flex-col items-stretch gap-3 w-80 bg-gray-900/40 border-1 border-gray-800">
+            <div className="fixed left-0 top-0 h-screen flex flex-col items-stretch gap-3 w-60 bg-gray-900/40 border-1 border-gray-800">
                 <div className="flex items-center gap-3 py-4 px-2">
                     <img
                         src={logo}

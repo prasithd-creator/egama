@@ -6,7 +6,8 @@ import { toast } from "react-toastify";
 import { useNavigate } from "react-router-dom";
 import TOPIC_SCENE_CONFIG from "../../assets/TopicScene";
 import OllamaProgress from "./OllamaProgress";
-import SideBar from "../../Component/SideBar";
+import UrlCard from "./Dashboard/UrlCard";
+import ResponseData from "./Dashboard/ResponseData";
 
 
 export default function ChatGPTUrlScreen() {
@@ -49,7 +50,7 @@ export default function ChatGPTUrlScreen() {
     const [scenesJobId, setScenesJobId] = useState<any>("");
     const [analyzeLoading, setAnalyzeLoading] = useState<boolean>(false);
     const { voiceModel, setVoiceModel } = context as any;
-
+    const [responseLoading, setResponseLoading] = useState(false);
 
     useEffect(() => {
         localStorage.setItem("responseData", JSON.stringify(responseData));
@@ -425,12 +426,19 @@ export default function ChatGPTUrlScreen() {
 
 
 
+    const [checking, setChecking] = useState(false);
 
+    useEffect(() => {
+        console.log(checking);
+    }, [checking]);
 
     return (
 
         <div className="min-h-screen w-full">
-
+            <div className="grid grid-cols-2 gap-2 ">
+                <UrlCard onSuccess={setResponseData} onLoading={setResponseLoading} />
+                <ResponseData data={responseData} onResponse={setChecking} loading={responseLoading} />
+            </div>
             {/* Main */}
             <div className="flex items-center justify-center min-h-screen px-4">
 
