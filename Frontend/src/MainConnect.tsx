@@ -14,7 +14,7 @@ function MainConnect() {
                 <main
                     className={
                         showSidebar
-                            ? "ml-60 min-h-screen overflow-y-auto mx-auto w-full"
+                            ? "lg:ml-60 ml-14 min-h-screen overflow-y-auto mx-auto w-full"
                             : "min-h-screen overflow-y-auto w-full"
                     }
                 >

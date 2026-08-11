@@ -435,7 +435,7 @@ export default function ChatGPTUrlScreen() {
     return (
 
         <div className="min-h-screen w-full">
-            <div className="grid grid-cols-2 gap-2 ">
+            <div className="grid grid-cols-2 gap-4 py-4 px-4">
                 <UrlCard onSuccess={setResponseData} onLoading={setResponseLoading} />
                 <ResponseData data={responseData} onResponse={setChecking} loading={responseLoading} />
             </div>
@@ -447,7 +447,7 @@ export default function ChatGPTUrlScreen() {
                     {/* Title */}
                     <div className="text-center mb-10">
 
-                        <h1 className="text-3xl font-bold text-white mb-1" onClick={() => navigate("/images", { state: responseData })}>
+                        <h1 className="text-3xl font-bold text-white mb-1">
                             AI Workflow Generator
                         </h1>
 

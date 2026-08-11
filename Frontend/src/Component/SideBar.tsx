@@ -20,7 +20,7 @@ function SideBar() {
     return (
         <>
             {/* Logo */}
-            <div className="fixed left-0 top-0 h-screen flex flex-col items-stretch gap-3 w-60 bg-gray-900/40 border-1 border-gray-800">
+            <div className="fixed left-0 top-0 h-screen flex flex-col items-stretch gap-3 lg:w-60 w-fit  bg-gray-900/40 border-1 border-gray-800">
                 <div className="flex items-center gap-3 py-4 px-2">
                     <img
                         src={logo}
@@ -28,7 +28,7 @@ function SideBar() {
                         className="w-16 object-contain"
                     />
 
-                    <div>
+                    <div className='hidden lg:block'>
                         <h1 className="text-white text-xl font-bold">
                             Egama AI
                         </h1>
@@ -57,7 +57,7 @@ function SideBar() {
                                             : "bg-gray-800 text-white hover:bg-gray-700 hover:shadow-[0_2px_10px_var(--primary)]/50"
                                             }`}
                                     >
-                                        <span>{feature.name}</span>
+                                        <span className="hidden lg:block">{feature.name}</span>
                                         <span className="material-symbols-outlined">
                                             {feature.icon}
                                         </span>

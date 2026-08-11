@@ -67,22 +67,27 @@ function ResponseData({ data, onResponse, loading }: Props) {
     return (
         <>
 
-            <div className="mt-6 mr-6 flex max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-sm">
+            <section className="flex max-w-3xl flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03] shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-sm">
 
                 {/* Header */}
-                <div className="flex items-center gap-3 px-5 py-4">
-                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[image:var(--gradient-glow)] text-sm font-bold text-white shadow-lg shadow-green-500/20">
-                        02
-                    </span>
+                <div className="flex justify-between items-center gap-3 px-5 py-4">
+                    <div className="flex items-center gap-3">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[image:var(--gradient-glow)] text-sm font-bold text-white shadow-lg shadow-green-500/20">
+                            02
+                        </span>
 
-                    <div>
-                        <h2 className="text-base font-semibold tracking-tight text-white md:text-lg">
-                            Reference Images
-                        </h2>
-                        <p className="text-sm text-gray-400">
-                            Select Reference Images
-                        </p>
+                        <div>
+                            <h2 className="text-base font-semibold tracking-tight text-white md:text-lg">
+                                Reference Images
+                            </h2>
+                            <p className="text-sm text-gray-400 relative italic">
+                                <span className="text-red-500 text-xl absolute top-[-6px] left-[-8px]">*</span>Must be at least 2 images
+                            </p>
+                        </div>
                     </div>
+
+                    <button disabled={loading || selectedImages.length !== 2} className='px-4 py-2 bg-(image:--gradient-glow) text-white rounded-lg cursor-pointer hover:shadow-[0_4px_10px_rgb(22_163_74_/_0.5)] transition-all duration-300 transform hover:-translate-y-0.5 disabled:pointer-events-none disabled:opacity-50'>Select</button>
+
                 </div>
 
                 {/* Images */}
@@ -90,14 +95,14 @@ function ResponseData({ data, onResponse, loading }: Props) {
                     !loading && data &&
                         ((Array.isArray(data) && data.length > 0) || (!Array.isArray(data) && Object.keys(data).length > 0)
                         ) ? (
-                        <div className="flex gap-3 overflow-x-auto px-4 pb-4 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-600">
+                        <div className="flex gap-3 overflow-x-auto px-4 pb-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-gray-600">
                             {referenceImg.map((img: any, index: number) => {
                                 const selected = selectedImages.includes(img);
                                 return (
                                     <div
                                         key={index}
                                         onClick={() => handleSelectImage(img)}
-                                        className={`group relative h-[120px] w-[136px] shrink-0 cursor-pointer overflow-hidden rounded-xl bg-gray-800 shadow-md ring-1 ring-white/10 transition-all duration-300 hover:ring-white/20 hover:shadow-xl ${selected
+                                        className={`group relative h-[120px] w-[136px] shrink-0 border cursor-pointer overflow-hidden rounded-xl bg-gray-800 shadow-md ring-1 ring-white/10 transition-all duration-300 hover:ring-white/20 hover:shadow-xl ${selected
                                             ? "border-blue-500"
                                             : "border-transparent hover:border-gray-400"
                                             }`}
@@ -137,7 +142,7 @@ function ResponseData({ data, onResponse, loading }: Props) {
                             )}
                         </div>
                     )}
-            </div>
+            </section>
 
 
         </>
