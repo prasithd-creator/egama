@@ -169,11 +169,11 @@ function PreviousFlow() {
     }
 
     return (
-        <div className="h-screen bg-[#111827] text-white flex w-full">
+        <div className="h-screen bg-[#111827] text-white flex w-full ">
 
             {/* Sidebar */}
-            <div className="w-72 border-r border-gray-800 overflow-y-auto scrollbar-thumb-gray-600">
-                <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10 mb-4">
+            <div className="w-72 border-r border-gray-800 overflow-y-auto scrollbar-thumb-gray-600 ">
+                <div className="flex items-center gap-3 px-6 py-5 border-b border-white/10 mb-4 transition-all duration-600 ease-in-out">
                     <button
                         onClick={() => window.history.back()}
                         className="h-10 w-10 rounded-xl bg-white/5 hover:bg-white/10 flex items-center justify-center transition-all cursor-pointer"

@@ -21,7 +21,7 @@ function ResponseData({ data, onResponse, loading }: Props) {
     };
 
     useEffect(() => {
-        if (!data?.markdown) return;
+        if (!data?.markdown) return console.log();
 
         const imageRegex = /!\[.*?\]\((https?:\/\/.*?)\)/g;
 

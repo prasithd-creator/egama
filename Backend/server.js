@@ -8,7 +8,7 @@ import connectDB from "./Config/mongoDB.ts";
 import dns from "node:dns";
 dns.setServers(["1.1.1.1", "8.8.8.8"]);
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT;
 connectDB();
 connectCloudinary();
 
