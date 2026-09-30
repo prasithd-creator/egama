@@ -8,13 +8,13 @@ function MainConnect() {
     return (
         <>
             <div className='flex w-full'>
-                <aside>
+                <aside >
                     {showSidebar && <SideBar />}
                 </aside>
                 <main
                     className={
                         showSidebar
-                            ? "lg:ml-60 ml-14 min-h-screen overflow-y-auto mx-auto w-full"
+                            ? "lg:ml-60 ml-20 min-h-screen overflow-y-auto mx-auto w-full"
                             : "min-h-screen overflow-y-auto w-full"
                     }
                 >

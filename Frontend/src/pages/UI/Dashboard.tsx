@@ -8,6 +8,7 @@ import TOPIC_SCENE_CONFIG from "../../assets/TopicScene";
 import OllamaProgress from "./OllamaProgress";
 import UrlCard from "./Dashboard/UrlCard";
 import ResponseData from "./Dashboard/ResponseData";
+import Scenes from "./Dashboard/Scenes";
 
 
 export default function ChatGPTUrlScreen() {
@@ -254,6 +255,7 @@ export default function ChatGPTUrlScreen() {
             setTimer((prev: number) => prev + 1);
         }, 1000);
 
+
         const metadata = responseData?.metadata;
         if (!metadata) return;
 
@@ -261,6 +263,7 @@ export default function ChatGPTUrlScreen() {
             ...metadata,
             requirements: requirement,
         };
+
         const updatedResponseData = {
             ...responseData,
             metadata: updatedMetadata,
@@ -438,6 +441,7 @@ export default function ChatGPTUrlScreen() {
             <div className="grid grid-cols-2 gap-4 py-4 px-4">
                 <UrlCard onSuccess={setResponseData} onLoading={setResponseLoading} />
                 <ResponseData data={responseData} onResponse={setChecking} loading={responseLoading} />
+                <Scenes />
             </div>
             {/* Main */}
             <div className="flex items-center justify-center min-h-screen px-4">

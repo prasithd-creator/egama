@@ -742,6 +742,7 @@ const ollamaScences = async (req, res) => {
                     Math.floor((data.characters / estimatedTotalCharacters) * scene.sceneCount),
                     scene.sceneCount
                 );
+                
                 progressStore.set(id, { ...data, scenes: estimatedScenes });
             }
         };

@@ -63,7 +63,7 @@ function UrlCard({ onSuccess, onLoading }: UrlCardProps) {
 
     return (
         <>
-            <section className="w-full max-w-3xl mx-auto px-3 sm:px-4 md:px-6 lg:px-0">
+            <section className="w-full max-w-3xl mx-auto">
                 <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4 sm:p-5 md:p-6 shadow-[0_8px_30px_rgba(0,0,0,0.25)] backdrop-blur-sm h-full">
 
                     {/* Header */}

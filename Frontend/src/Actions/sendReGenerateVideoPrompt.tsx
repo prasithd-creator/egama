@@ -21,8 +21,6 @@ export const sendReGenerateVideoPrompt = async (prompt: string, change: string, 
         return res.data.message;
     }
 
-
-
     console.log(res.data);
 
     return res.data;
