@@ -27,4 +27,4 @@ function MainConnect() {
     )
 }
 
-export default MainConnect
+export default MainConnect;

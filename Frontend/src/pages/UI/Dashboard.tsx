@@ -58,8 +58,8 @@ export default function ChatGPTUrlScreen() {
     }, [responseData]);
 
     useEffect(() => {
-        console.log("Voice Model:", voiceModel);
-    }, [voiceModel]);
+        console.log("Selected Images changed:", selectedImages);
+    }, [selectedImages]);
 
     useEffect(() => {
         const cancelJob = () => {
@@ -166,7 +166,7 @@ export default function ChatGPTUrlScreen() {
                 if (SKIP_HINTS.some(hint => lower.includes(hint))) return false;
 
                 return true;
-            })
+            });
 
         setReferenceImg(productImages);
     }, [responseData?.markdown]);
@@ -441,7 +441,7 @@ export default function ChatGPTUrlScreen() {
             <div className="grid grid-cols-2 gap-4 py-4 px-4">
                 <UrlCard onSuccess={setResponseData} onLoading={setResponseLoading} />
                 <ResponseData data={responseData} onResponse={setChecking} loading={responseLoading} />
-                <Scenes />
+                {selectedImages.length > 0 && <Scenes  images={selectedImages}  />}
             </div>
             {/* Main */}
             <div className="flex items-center justify-center min-h-screen px-4">

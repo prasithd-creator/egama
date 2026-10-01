@@ -186,7 +186,7 @@ const ollama = async (req, res) => {
 
         let completedCharacters = 0;
 
-    
+
         // Generates the image prompt for ONE scene
         const generateOneScenePrompt = async (scene) => {
             const messages = buildMessages({ text, webContent, scene });
@@ -328,5 +328,346 @@ const ollama = async (req, res) => {
         runningJobs.delete(jobId);
     }
 };
+
+// const ollama = async (req, res) => {
+//     const jobId = Date.now().toString();
+//     const controller = new AbortController();
+
+//     runningJobs.set(jobId, controller);
+
+//     console.log("CREATE GEMINI JOB", jobId);
+
+//     progressStore.set(jobId, {
+//         progress: 0,
+//         characters: 0,
+//         scenes: 0,
+//         remaining: null,
+//         status: "running"
+//     });
+
+//     try {
+//         res.json({ jobId });
+
+//         console.log("Incoming Gemini Request:");
+//         console.dir(req.body, { depth: null });
+
+//         const { text, webContent, scenes } = req.body;
+
+//         const sceneList = scenes?.screenplay?.scenes ?? [];
+//         const totalScenes =
+//             scenes?.screenplay?.scene_count ?? sceneList.length;
+
+//         if (!totalScenes || !sceneList.length) {
+//             throw new Error(
+//                 "Invalid scenes payload: missing screenplay.scenes / screenplay.scene_count"
+//             );
+//         }
+
+//         const overallStartTime = Date.now();
+
+//         let completedCharacters = 0;
+
+//         const generateOneScenePrompt = async (scene) => {
+//             if (controller.signal.aborted) {
+//                 throw new DOMException(
+//                     "Generation cancelled",
+//                     "AbortError"
+//                 );
+//             }
+
+//             const messages = buildMessages({
+//                 text,
+//                 webContent,
+//                 scene
+//             });
+
+//             const sceneWeight = 100 / totalScenes;
+//             const completedScenes = scene.scene_number - 1;
+
+//             const prompt = messages
+//                 .map((message) => {
+//                     if (typeof message === "string") {
+//                         return message;
+//                     }
+
+//                     if (message?.content) {
+//                         return Array.isArray(message.content)
+//                             ? message.content
+//                                 .map((item) =>
+//                                     typeof item === "string"
+//                                         ? item
+//                                         : item?.text || ""
+//                                 )
+//                                 .join("\n")
+//                             : message.content;
+//                     }
+
+//                     return "";
+//                 })
+//                 .filter(Boolean)
+//                 .join("\n\n");
+
+//             let generatedCharacters = 0;
+
+//             progressStore.set(jobId, {
+//                 progress: Number(
+//                     (completedScenes * sceneWeight).toFixed(1)
+//                 ),
+//                 characters: completedCharacters,
+//                 scenes: completedScenes,
+//                 elapsed: Number(
+//                     ((Date.now() - overallStartTime) / 1000).toFixed(1)
+//                 ),
+//                 remaining: null,
+//                 status: "running"
+//             });
+
+//             console.log(
+//                 `Gemini generating scene ${scene.scene_number}`
+//             );
+
+//             let response;
+
+//             try {
+//                 response = await gemini.models.generateContent({
+//                     // To this:
+
+//                     model: "gemini-3.8-flash",
+//                     contents: prompt,
+//                     config: {
+//                         temperature: 0.7,
+//                         maxOutputTokens: 4096,
+//                         responseMimeType: "application/json",
+//                         abortSignal: controller.signal
+//                     }
+//                 });
+//             } catch (error) {
+//                 if (
+//                     controller.signal.aborted ||
+//                     error?.name === "AbortError"
+//                 ) {
+//                     throw new DOMException(
+//                         "Generation cancelled",
+//                         "AbortError"
+//                     );
+//                 }
+
+//                 throw error;
+//             }
+
+//             if (controller.signal.aborted) {
+//                 throw new DOMException(
+//                     "Generation cancelled",
+//                     "AbortError"
+//                 );
+//             }
+
+//             const generatedText = response?.text?.trim();
+
+//             if (!generatedText) {
+//                 throw new Error(
+//                     `Gemini returned an empty response for scene ${scene.scene_number}`
+//                 );
+//             }
+
+//             generatedCharacters = generatedText.length;
+
+//             progressStore.set(jobId, {
+//                 progress: Number(
+//                     (
+//                         completedScenes * sceneWeight +
+//                         sceneWeight * 0.95
+//                     ).toFixed(1)
+//                 ),
+//                 characters:
+//                     completedCharacters + generatedCharacters,
+//                 scenes: completedScenes,
+//                 elapsed: Number(
+//                     ((Date.now() - overallStartTime) / 1000).toFixed(1)
+//                 ),
+//                 remaining: null,
+//                 status: "running"
+//             });
+
+//             let parsedResponse;
+
+//             try {
+//                 parsedResponse = JSON.parse(generatedText);
+//             } catch (error) {
+//                 console.error(
+//                     `Invalid Gemini JSON for scene ${scene.scene_number}:`,
+//                     generatedText
+//                 );
+
+//                 throw new Error(
+//                     `Gemini returned invalid JSON for scene ${scene.scene_number}`
+//                 );
+//             }
+
+//             if (!isValidImagePrompt(parsedResponse)) {
+//                 throw new Error(
+//                     `Invalid Gemini image prompt response for scene ${scene.scene_number}`
+//                 );
+//             }
+
+//             completedCharacters += generatedCharacters;
+
+//             return extractImagePromptResult(parsedResponse);
+//         };
+
+//         const imagePrompts = [];
+
+//         for (let i = 0; i < sceneList.length; i++) {
+//             if (controller.signal.aborted) {
+//                 throw new DOMException(
+//                     "Generation cancelled",
+//                     "AbortError"
+//                 );
+//             }
+
+//             const scene = sceneList[i];
+
+//             console.log(
+//                 `\n--- Generating Gemini prompt for scene ${scene.scene_number} (${i + 1}/${totalScenes}) ---\n`
+//             );
+
+//             const result =
+//                 await generateOneScenePrompt(scene);
+
+//             imagePrompts.push(result);
+
+//             const elapsed =
+//                 (Date.now() - overallStartTime) / 1000;
+
+//             progressStore.set(jobId, {
+//                 progress: Number(
+//                     (((i + 1) / totalScenes) * 100).toFixed(1)
+//                 ),
+//                 characters: completedCharacters,
+//                 scenes: i + 1,
+//                 elapsed: Number(elapsed.toFixed(1)),
+//                 remaining: null,
+//                 status: "running"
+//             });
+
+//             console.log(
+//                 `--- Scene ${scene.scene_number} complete (${i + 1}/${totalScenes}) ---`
+//             );
+//         }
+
+//         const cleanImagePrompts = imagePrompts.flat();
+
+//         progressStore.set(jobId, {
+//             progress: 100,
+//             characters: completedCharacters,
+//             scenes: totalScenes,
+//             elapsed: Number(
+//                 ((Date.now() - overallStartTime) / 1000).toFixed(1)
+//             ),
+//             remaining: null,
+//             status: "completed",
+//             data: {
+//                 image_prompts: cleanImagePrompts
+//             }
+//         });
+
+//         const category = scenes.screenplay.company_name;
+//         const brand = scenes.screenplay.brand_name;
+//         const topic = scenes.screenplay.topic;
+
+//         let imagePrompt = await ImagePrompt.findOne({
+//             category
+//         });
+
+//         if (!imagePrompt) {
+//             imagePrompt = new ImagePrompt({
+//                 category,
+//                 brands: []
+//             });
+//         }
+
+//         let brandFolder = imagePrompt.brands.find(
+//             (item) => item.name === brand
+//         );
+
+//         if (!brandFolder) {
+//             brandFolder = {
+//                 name: brand,
+//                 topics: []
+//             };
+
+//             imagePrompt.brands.push(brandFolder);
+//         }
+
+//         let topicsFolder = brandFolder.topics.find(
+//             (item) => item.name === topic
+//         );
+
+//         if (!topicsFolder) {
+//             brandFolder.topics.push({
+//                 name: topic,
+//                 image_prompts: cleanImagePrompts
+//             });
+//         } else {
+//             topicsFolder.image_prompts = cleanImagePrompts;
+//         }
+
+//         await imagePrompt.save();
+
+//         console.log("imagePrompts", imagePrompts);
+//         console.log(
+//             "All Gemini scene image prompts generated."
+//         );
+
+//     } catch (err) {
+//         const wasCancelled =
+//             err?.name === "AbortError" ||
+//             controller.signal.aborted;
+
+//         if (wasCancelled) {
+//             console.log(
+//                 `Job ${jobId}: cancelled by user.`
+//             );
+//         } else {
+//             console.error(
+//                 `Job ${jobId}: Gemini error`,
+//                 err
+//             );
+//         }
+
+//         progressStore.set(jobId, {
+//             progress: 0,
+//             characters: 0,
+//             scenes: 0,
+//             remaining: null,
+//             status: wasCancelled
+//                 ? "cancelled"
+//                 : "failed",
+//             error: wasCancelled
+//                 ? "Generation cancelled by user"
+//                 : err?.message || "Gemini generation failed"
+//         });
+
+//         if (!res.headersSent) {
+//             return res.status(
+//                 wasCancelled ? 200 : 500
+//             ).json({
+//                 success: wasCancelled,
+//                 cancelled: wasCancelled,
+//                 error: wasCancelled
+//                     ? undefined
+//                     : err?.message
+//             });
+//         }
+//     } finally {
+//         runningJobs.delete(jobId);
+
+//         console.log(
+//             `CLEANUP GEMINI JOB ${jobId}`
+//         );
+//     }
+// };
+
+
 
 export default ollama;
